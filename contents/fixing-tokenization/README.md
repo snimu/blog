@@ -52,6 +52,6 @@ To cite this article, please use the following BibTeX entry (or adapt it similar
     author={Sebastian M\"uller},
     year={2024},
     month={sep},
-    url={https://github.com/snimu/blog/fixing-tokenization/README.md}
+    url={https://github.com/snimu/blog/blob/main/contents/fixing-tokenization/README.md}
 }
 ```
