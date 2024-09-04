@@ -34,9 +34,6 @@ And who knows, it might also confer additional adversarial robustness, like in "
 
 - You could use an arbitrary number of tokenizers, from byte-level to ones with million token vocabs, as long as they are all different enough from each other (else, what's the point?).
 - You could extend the decoder-decoder along the entire length of the model, using cross-attention up until the final layer. I don't think this is necessary, but it's worth an ablation.
-- You could make the cross-attention more local. After all, the attention matrix is of size $s_{\mathrm{byte-level}} \times s_{\mathrm{normal}}$, where $s$ is the sequence length. Reducing this size is likely worth it, and fixing tokenization issues is likely possible with very local attention. The extreme of this attention pattern is shown below:
-
-![Local attention](LocalAttention.png)
 
 **Conclusion**
 
