@@ -1,4 +1,4 @@
-# Fixing tokenization
+# Idea: Fixing tokenization
 
 Tokenization causes many issues in LLMs.
 
