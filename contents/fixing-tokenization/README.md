@@ -30,6 +30,15 @@ The added decoder working at the byte-level can likely help the model recognize 
 
 And who knows, it might also confer additional adversarial robustness, like in "Ensemble everything everywhere".
 
+**How to test this**
+
+For large-scale tests, just train the model and see if it works---for example, the "how many 'r's are in strawberry".
+
+However, you might want to do smaller tests first. For these, it might be more difficult to  distinguish tokenization issues from other issues. There are two ways to detect if the method works:
+
+1. You get lower perplexity on a test set, at the same compute cost. This would obviously be great, but unclear if it will happen.
+2. It is possible to perform search/gradient-based attacks on the model (see [here](https://blog.haizelabs.com/posts/acg/) for an example). It should be possible to do the same for this model and a compute-equivalent model without the byte-level branch, except with arbitrary outputs, not just adversarial ones (because I wouldn't put in the effort to make the model adversarially robust for this test). Then, you can see if the inputs that cause the desired outputs are more interpretable for the model including the byte-level branch than for the one without.
+
 **Variations**
 
 - You could use an arbitrary number of tokenizers, from byte-level to ones with million token vocabs, as long as they are all different enough from each other (else, what's the point?).
