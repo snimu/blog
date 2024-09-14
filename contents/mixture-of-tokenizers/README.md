@@ -1,12 +1,10 @@
 # Mixture of Tokenizers (proposal)
 
-Tokenization causes many issues in LLMs.
+Tokenization causes many issues in LLMs ("how many Rs are in strawberry?", "which is larger, 9.11 or 0.9?").
 
-Inpired by Stanislav Fort et al.'s ["Ensemble everything everywhere: Multi-scale aggregation for adversarial robustness"](https://arxiv.org/abs/2408.05446) paper, here is a proposal for a way to cheaply mitigate those:
+Stanislav Fort and Balaji Lakshminarayanan use a mixture of image resolutions to improve adversarial robustness of image models in ["Ensemble everything everywhere: Multi-scale aggregation for adversarial robustness"](https://arxiv.org/abs/2408.05446). Here, I will propose a similar approach for tokenization in LLMs, with very little additional costs. I will also propose a way to test it.
 
-![Fixing tokenization](FullPipeline.png)
-
-**Background: Ensemble everything everywhere**
+## Background: Ensemble everything everywhere
 
 "Ensemble everything everywhere" works on CNNs for images. One part of their pipeline making CNNs more adversarially robust is using the same image at different resolutions as the input:
 
@@ -16,45 +14,100 @@ This is one important technique that enables adversarial robustness in CNNs, wit
 
  We can do the same for tokens.
 
-**The pipeline**
+## Seeding embeddings with character-level information
 
-As shown above, we can run two models in parallel, both with a causal attention mask (a decoder-decoder model?). One (with model dimension d1) uses a character-level tokenizer, the other (dimension d2) a normal one. There is Cross Attention between them to get character-level info into the normal tokens.
+Here is how a regular Llama model (used for illustration) uses embeddings:
 
-This will be cheap:
+![Llama standard](LlamaStandard.png)
 
-- The character-level model is likely only needed in first few layers (or even just the first layer) to incorporate character-level info into the main model branch.
-- d1 << d2
-- The character-level branch can use very local attention (or RWKV/Mamba/xLSTM/...), which means that the extreme sequence length is not a problem.
+A sub-word tokenizer is used to split the input, then the tokens are embedded using the pre-trained Llama embeddings.
 
-The added decoder working at the character-level can likely help the model recognize and fix tokenization issues, at very little additional cost. Of course, it will only be able to do so at the input, not the output, but that seems like a big step already.
+Here is my proposal:
 
-And who knows, it might also confer additional adversarial robustness, like in "Ensemble everything everywhere".
+![Llama with character-level embeddings](LlamaWithCharEmbeddings.png)
 
-**How to test this**
+### Why would that work?
 
-For large-scale tests, just train the model and see if it works---for example, the "how many 'r's are in strawberry".
+The idea is to seed the sub-word tokenizer embeddings with character tokenizer embeddings. I hypothesize that this will have two advantages:
 
-However, you might want to do smaller tests first. For these, it might be more difficult to  distinguish tokenization issues from other issues. There are two ways to detect if the method works:
+1. Provide the model with more diverse "views" of the input, just like for images in "Ensemble everything everywhere"
+2. As a special case of this, enable the model to auto-fix tokenization issues. 
+   This should work because many tokenization issues are either due to undertrained tokens&mdash;which won't apply to character-level tokenizers, because their dictionary is so small that the embedding model is assured to see every possible token multiple times during training&mdash;or due to splitting up of text into inconvenent chunks&mdash;which is especially bad for math, but wouldn't apply to character-level tokenizers
 
-1. You get lower perplexity on a test set, at the same compute cost. This would obviously be great, but unclear if it will happen.
-2. It is possible to perform search/gradient-based attacks on the model (see [here](https://blog.haizelabs.com/posts/acg/) for an example). It should be possible to do the same for this model and a compute-equivalent model without the character-level branch, except with arbitrary outputs, not just adversarial ones (because I wouldn't put in the effort to make the model adversarially robust for this test). Then, you can see if the inputs that cause the desired outputs are more interpretable for the model including the character-level branch than for the one without.
 
-**Variations**
+### Isn't this very inefficient?
 
-- You could use an arbitrary number of tokenizers, from character-level to ones with million token vocabs, as long as they are all different enough from each other (else, what's the point?).
-- You could extend the decoder-decoder along the entire length of the model, using cross-attention up until the final layer. I don't think this is necessary, but it's worth an ablation.
+No. This seeding of the embeddings could be done very efficiently, for the following reasons:
 
-**Conclusion**
+- While the Attention operation following the character-level has to work with a large sequence-length ($s_{char}$),
+  it can likely be done with a very local Attention window, which is very efficient.
+  Alternatively, it could use a State-Space Model (SSM) like Mamba, RWKV, xLSTM, Griffin, or any of the dozens of others that are available.
+- The cross-attention can similarly use very local,
+  potentially only covering one sub-word token at a time (with the corresponding characters)
+- The embedding dimension of the character-level branch of the model ($d_{char}$)
+  can likely be made much smaller than that of the sub-word branch ($d_{Llama}$).
 
-I don't have the time or money to implement this, but I think it's promising, so please somebody pick this up and keep me updated :)
+### What does the 'residual' connection from the Llama embeddings to the Llama model do?
 
-**Citation**
+If I trained a model from the ground up with this technique, I wouldn't use this residual.
+
+However, to test the method, I would prepend the shown setup before Llama, start with it having a minimal impact on the Llama input, then slowly ramp it up over training. If we call the character-seeding part of the model (up to and including the cross-attention) $m_{seedind}$ and the Embedding model for Llama $e_{Llama}$, then I would linearly ramp the parameter $\alpha$ in the following equation over trianing:
+
+$$x_{Llama} = (1 - \alpha) \cdot e_{Llama}(x) + \alpha \cdot m_{seed}(e_{Llama}(x)) $$
+
+(This is sloppy notation, I know; it's just meant to get the point across. Orient yourself on the provided images.)
+
+Again, **this is how I would test the method!**
+
+### What about inference?
+
+I would leave the residual connection away during inference, after I've ramped $\alpha$ to $1$ during training:
+
+![LlamaInference](LlamaInference.png)
+
+### Could this theoretically be turned into an image model?
+
+Sure, just project the image-embeddings (however you generate them) directly into the Llama model:
+
+![Llama with vision](LlamaWithVision.png)
+
+## Variations
+
+There are a few ways to vary the ideas presented above.
+
+### Use $d_{char}$ everywhere
+
+It is likely sufficient to use $d_{char}$ instead of $d_{Llama}$ in the sub-word branch, too. Then, you would only project up to $d_{Llama}$ with the one Fully Connected Layer before the actual Llama model (which you have to do anyway).
+
+This layer then effectively serves as the Embedding model, except that its inputs are more semantically rich.
+
+This would serve as an efficency improvement, likely at low to no performance cost.
+
+### More tokenizers
+
+You can always use more tokenizers.
+
+One possibility is to use a byte-level tokenizer in addition to the others (though that would make attribution to inputs harder and less humanly interpretable).
+
+Another possibility is to use several sub-word tokenizers, tuned for different languages, and project the embeddings of all into the ones that yield the shortest sequence length. This would yield language-specialization; and it would likely yield significant efficiency improvements, because the sequence length that the entire LM backbone is working on would be shortened.
+
+### More layers
+
+Instead of just one layer of MLP + Attention + Cross Attention, you could have several. I have no intuition for whether or not this would yield significant performance improvements.
+
+![Llama multi-layer](LlamaMultiLayer.png)
+
+### Different backbones
+
+I've only used Llama as an example for how this could look, and how I would test the method. However, it should work just as well on different Transformer backbones. I also see no reason for what this shouldn't benefit non-Transformer architectures. And finally, it should of course be fairly simple to pre-train a model using this technique from the start (if you have that kind of budget).
+
+## Citation
 
 To cite this article, please use the following BibTeX entry (or adapt it similarly):
 
 ```latex
-@misc{mueller2024fixingtokenization,
-    title={Fixing tokenization},
+@misc{mueller2024mixtureoftokenizers,
+    title={Mixture of Tokenizers (proposal)},
     author={Sebastian M\"uller},
     year={2024},
     month={sep},

@@ -4,5 +4,4 @@ Markdown files serving as my blog.
 
 Table of Contents (dates as yyyy-mm-dd):
 
-- [Idea: Frequency space VLMs](contents/frequency-space-VLMs/README.md) (2024-09-07)
-- [Idea: Fixing Tokenization](contents/fixing-tokenization/README.md) (2024-09-03)
+- [Mixture of Tokenizers (proposal)](contents/mixture-of-tokenizers/README.md) (2024-09-03, updated 2024-09-14)
