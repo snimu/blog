@@ -1,4 +1,4 @@
-# Idea: Fixing tokenization
+# Mixture of Tokenizers (proposal)
 
 Tokenization causes many issues in LLMs.
 
@@ -18,15 +18,15 @@ This is one important technique that enables adversarial robustness in CNNs, wit
 
 **The pipeline**
 
-As shown above, we can run two models in parallel, both with a causal attention mask (a decoder-decoder model?). One (with model dimension d1) uses a byte level tokenizer, the other (dimension d2) a normal one. There is Cross Attention between them to get byte-level info into the normal tokens.
+As shown above, we can run two models in parallel, both with a causal attention mask (a decoder-decoder model?). One (with model dimension d1) uses a character-level tokenizer, the other (dimension d2) a normal one. There is Cross Attention between them to get character-level info into the normal tokens.
 
 This will be cheap:
 
-- The byte-level model is likely only needed in first few layers (or even just the first layer) to incorporate byte-level info into the main model branch.
+- The character-level model is likely only needed in first few layers (or even just the first layer) to incorporate character-level info into the main model branch.
 - d1 << d2
-- The byte-level branch can use very local attention (or RWKV/Mamba/xLSTM/...), which means that the extreme sequence length is not a problem.
+- The character-level branch can use very local attention (or RWKV/Mamba/xLSTM/...), which means that the extreme sequence length is not a problem.
 
-The added decoder working at the byte-level can likely help the model recognize and fix tokenization issues, at very little additional cost. Of course, it will only be able to do so at the input, not the output, but that seems like a big step already.
+The added decoder working at the character-level can likely help the model recognize and fix tokenization issues, at very little additional cost. Of course, it will only be able to do so at the input, not the output, but that seems like a big step already.
 
 And who knows, it might also confer additional adversarial robustness, like in "Ensemble everything everywhere".
 
@@ -37,11 +37,11 @@ For large-scale tests, just train the model and see if it works---for example, t
 However, you might want to do smaller tests first. For these, it might be more difficult to  distinguish tokenization issues from other issues. There are two ways to detect if the method works:
 
 1. You get lower perplexity on a test set, at the same compute cost. This would obviously be great, but unclear if it will happen.
-2. It is possible to perform search/gradient-based attacks on the model (see [here](https://blog.haizelabs.com/posts/acg/) for an example). It should be possible to do the same for this model and a compute-equivalent model without the byte-level branch, except with arbitrary outputs, not just adversarial ones (because I wouldn't put in the effort to make the model adversarially robust for this test). Then, you can see if the inputs that cause the desired outputs are more interpretable for the model including the byte-level branch than for the one without.
+2. It is possible to perform search/gradient-based attacks on the model (see [here](https://blog.haizelabs.com/posts/acg/) for an example). It should be possible to do the same for this model and a compute-equivalent model without the character-level branch, except with arbitrary outputs, not just adversarial ones (because I wouldn't put in the effort to make the model adversarially robust for this test). Then, you can see if the inputs that cause the desired outputs are more interpretable for the model including the character-level branch than for the one without.
 
 **Variations**
 
-- You could use an arbitrary number of tokenizers, from byte-level to ones with million token vocabs, as long as they are all different enough from each other (else, what's the point?).
+- You could use an arbitrary number of tokenizers, from character-level to ones with million token vocabs, as long as they are all different enough from each other (else, what's the point?).
 - You could extend the decoder-decoder along the entire length of the model, using cross-attention up until the final layer. I don't think this is necessary, but it's worth an ablation.
 
 **Conclusion**
