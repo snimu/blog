@@ -1,12 +1,12 @@
 # Mixture of Tokenizers (proposal)
 
-Tokenization causes many issues in LLMs ("how many Rs are in strawberry?", "which is larger, 9.11 or 0.9?").
+Tokenization causes many issues in LLMs ("how many Rs are in strawberry?", "which is larger, 9.11 or 9.9?").
 
 Stanislav Fort and Balaji Lakshminarayanan use a mixture of image resolutions to improve adversarial robustness of image models in ["Ensemble everything everywhere: Multi-scale aggregation for adversarial robustness"](https://arxiv.org/abs/2408.05446). Here, I will propose a similar approach for tokenization in LLMs, with very little additional costs. I will also propose a way to test it.
 
 ## Background: Ensemble everything everywhere
 
-"Ensemble everything everywhere" works on CNNs for images. One part of their pipeline making CNNs more adversarially robust is using the same image at different resolutions as the input:
+"Ensemble everything everywhere" works on CNNs for images. One part of their pipeline making CNNs more adversarially robust is using the same image at different resolutions as the input ("multi-resolution prior"):
 
 ![Image stacking](ImageStacking.png)
 
@@ -34,7 +34,6 @@ The idea is to seed the sub-word tokenizer embeddings with character tokenizer e
 2. As a special case of this, enable the model to auto-fix tokenization issues. 
    This should work because many tokenization issues are either due to undertrained tokens&mdash;which won't apply to character-level tokenizers, because their dictionary is so small that the embedding model is assured to see every possible token multiple times during training&mdash;or due to splitting up of text into inconvenent chunks&mdash;which is especially bad for math, but wouldn't apply to character-level tokenizers
 
-
 ### Isn't this very inefficient?
 
 No. This seeding of the embeddings could be done very efficiently, for the following reasons:
@@ -57,7 +56,7 @@ $$x_{Llama} = (1 - \alpha) \cdot e_{Llama}(x) + \alpha \cdot m_{seed}(e_{Llama}(
 
 (This is sloppy notation, I know; it's just meant to get the point across. Orient yourself on the provided images.)
 
-Again, **this is how I would test the method!**
+Again, **this is how I would test the method!** Training from the ground up, I would orient myself on [the inference part of this article](#what-about-inference).
 
 ### What about inference?
 
