@@ -103,13 +103,13 @@ We now only need positional encodings to signify the relative position of the cu
 
 Now, we can obviously add all the other input-modalities of the robot to the stream, like audio, depth sensing, pressure sensing, etc. The only modality I'm not sure about is actually text; this is because I'm unsure how to synchronize the text-stream with the other modalities. All modalities are sampled at a constant frequency, except for text, which comes at random intervals. Sometimes, there won't be any text for hours, sometimes the rate of text might exceed that of the other modalities. There are probably ways to fix this with $\texttt{noop}$-tokens and a high sample-rate for the other inputs, but it seems unnecessarily complicated.
 
-It should also be possible to efficiently combine modalidies with different sampling rates using my [mixture of tokenizers](../mixture-of-tokenizers)-idea. In fact, it could make sense to mix different image-resolutions as described above, and then combine the output with a different modality mixture-of-tokenizers-style. There is, of course, a tradeoff between increased complexity on the one hand, and increased efficiency (by combining the samples of multiple modalities and resolutions into a single stream) and the inductive bias of automatic temporal alignment on the other hand.
+It should also be possible to efficiently combine modalities with different sampling rates using my [mixture of tokenizers](../mixture-of-tokenizers)-idea. In fact, it could make sense to mix different image-resolutions as described above, and then combine the output with a different modality mixture-of-tokenizers-style. There is, of course, a tradeoff between increased complexity on the one hand, and increased efficiency (by combining the samples of multiple modalities and resolutions into a single stream) and the inductive bias of automatic temporal alignment on the other hand.
 
 ## Citation
 
 If you use this idea, please cite it:
 
-```
+```bibtex
 @misc{snimu2024multiresolutionvlms,
     title={Multi-resolution VLMs for robotics},
     author={Sebastian M\"uller},
@@ -117,3 +117,4 @@ If you use this idea, please cite it:
     month={nov},
     url={https://github.com/snimu/blog/blob/main/contents/multi-resolution-vlms/README.md}
 }
+```
