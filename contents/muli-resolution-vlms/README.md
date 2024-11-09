@@ -105,6 +105,12 @@ Now, we can obviously add all the other input-modalities of the robot to the str
 
 It should also be possible to efficiently combine modalities with different sampling rates using my [mixture of tokenizers](../mixture-of-tokenizers)-idea. In fact, it could make sense to mix different image-resolutions as described above, and then combine the output with a different modality mixture-of-tokenizers-style. There is, of course, a tradeoff between increased complexity on the one hand, and increased efficiency (by combining the samples of multiple modalities and resolutions into a single stream) and the inductive bias of automatic temporal alignment on the other hand.
 
+## Other ideas
+
+(Feel free to comment on [this X post](https://x.com/omouamoua/status/1855343081786314819) if you have a good one and want me to add it here)
+
+- "pass a feedback connection from the model to an actuator controlling the direction of the camera so it can freely align the foveated (center of image) section with the point of interest based on visual attention" &mdash; [@basedneoleo](https://x.com/basedneoleo) in [this X post](https://x.com/basedneoleo/status/1855363331902640154?s=46)
+
 ## Citation
 
 If you use this idea, please cite it:
