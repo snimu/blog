@@ -11,3 +11,6 @@ Table of Contents (dates as yyyy-mm-dd):
 
 - [Doing Pre-training Research on Instruction Models](contents/doing-pretraining-research-on-instruction-models/README.md) 
   - 2024-11-07
+
+- [Question: Does PEFT with SVD and full parameter finetuning work?](contents/question-does-peft-with-svd-and-full-parameter-finetuning-work/README.md) 
+  - 2024-11-08
