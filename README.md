@@ -14,3 +14,6 @@ Table of Contents (dates as yyyy-mm-dd):
 
 - [Question: Does PEFT with SVD and full parameter finetuning work?](contents/question-does-peft-with-svd-and-full-parameter-finetuning-work/README.md) 
   - 2024-11-08
+
+- [Multi-resolution VLMs for robotics](contents/muli-resolution-vlms/README.md)
+  - 2024-11-09
