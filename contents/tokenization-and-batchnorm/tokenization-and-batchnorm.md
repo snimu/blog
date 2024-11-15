@@ -48,6 +48,6 @@ If you use this article in your work, please cite:
     author={Sebastian M\"uller},
     year={2024},
     month={nov},
-    url={https://github.com/snimu/blog/blob/main/contents/tokenization-and-batchnorm/README.md}
+    url={https://github.com/snimu/blog/blob/main/contents/tokenization-and-batchnorm/tokenization-and-batchnorm.md}
 }
 ```
