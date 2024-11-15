@@ -4,6 +4,9 @@ Markdown files serving as my blog.
 
 Table of Contents (dates as yyyy-mm-dd):
 
+- [Tokenization and batch-norm: incorporating global statistics](contents/tokenization-and-batchnorm/)
+  - 2024-11-14
+
 - [Multi-resolution VLMs for robotics](contents/muli-resolution-vlms/README.md)
   - 2024-11-09
 
