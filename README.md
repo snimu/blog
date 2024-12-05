@@ -4,6 +4,9 @@ Markdown files serving as my blog.
 
 Table of Contents (dates as yyyy-mm-dd):
 
+- [LLM Test Time Compute Scaling *is* model scaling](contents/llm-test-time-scaling-is-model-scaling/test-time-scaling-is-model-scaling.md)
+  - 2024-12-05
+
 - [Tokenization and batch-norm: incorporating global statistics](contents/tokenization-and-batchnorm/tokenization-and-batchnorm.md)
   - 2024-11-14
 
