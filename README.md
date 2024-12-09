@@ -4,6 +4,9 @@ Markdown files serving as my blog.
 
 Table of Contents (dates as yyyy-mm-dd):
 
+- [Merge tokens in autoregressive generation](contents/token-merge/merge-tokens-in-autoregressive-generation.md)
+  - 2024-12-09
+
 - [LLM Test Time Compute Scaling *is* model scaling](contents/llm-test-time-scaling-is-model-scaling/test-time-scaling-is-model-scaling.md)
   - 2024-12-05
 
