@@ -4,6 +4,9 @@ Markdown files serving as my blog.
 
 Table of Contents (dates as yyyy-mm-dd):
 
+- [Embeddings are in the middle of the model](contents/embeddings-thoughts/article.md)
+  - 2024-12-24
+
 - [Merge tokens in autoregressive generation](contents/token-merge/merge-tokens-in-autoregressive-generation.md)
   - 2024-12-09
 
