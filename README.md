@@ -4,9 +4,6 @@ Markdown files serving as my blog.
 
 Table of Contents (dates as yyyy-mm-dd):
 
-- [Proposal: a pareto improvement to the Byte Latent Transformer](contents/pareto-improvement-to-blt/article.md)
-  - 2024-12-21
-
 - [Merge tokens in autoregressive generation](contents/token-merge/merge-tokens-in-autoregressive-generation.md)
   - 2024-12-09
 
