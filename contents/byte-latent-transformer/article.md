@@ -6,7 +6,7 @@ This is a long read and contains some speculation. It probably helps to read the
 
 ## The goal
 
-The goal of the paper is to use bytes (characters) as inputs in a transformer, without increasing the sequence length of the model compared to a normal transformer with Byte-Pair Encoding (BPE) tokens.
+The goal of the paper is to use bytes (characters) as inputs in a transformer, without increasing the sequence length of the model compared to a normal transformer with Byte-Pair Encoding (BPE) tokens, by dynamically grouping bytes into patches.
 
 This is desireable because it allows the model to have access to much more fine-grained information about the input than possible with BPE. As we will see later, it can also lead to superior scaling properties. Both of these are a big deal.
 
@@ -29,11 +29,11 @@ Figure 2 gives a good overview of the overall architecture:
 
 ![Architecture overview](images/Figure2_ArchitectureOverview.png)
 
-Let's go through each part of the architecture.
+Let's go through each step.
 
 ### Grouping bytes into tokens
 
-There are many ways to group bytes into tokens. However, a very promising approach is to use the information that is already available at the model outputs. This was popularized by [entropix](https://github.com/xjdr-alt/entropix), which uses the uncertainty of the model's next-token prediction (in normal transformers using BPE tokens) to adjust their sampling strategy. For example, always pick the most likely token when the model is consistently confident about its predictions, but insert "thinking" tokens (like "wait" or "...") manually into its context window when it is consistently uncertain.
+There are many ways to group bytes into tokens. However, a very promising approach is to use the information that is already available at the model outputs via its prediction entropy. This was popularized by [entropix](https://github.com/xjdr-alt/entropix), which uses the uncertainty of the model's next-token prediction (in normal transformers using BPE tokens) to adjust their sampling strategy. For example, always pick the most likely token when the model is consistently confident about its predictions, but insert "thinking" tokens (like "wait" or "...") manually into its context window when it is consistently uncertain.
 
 We could use the same information about model certainty to find out which bytes are easy to predict, and which ones are difficult.
 
@@ -65,7 +65,7 @@ Here is my intuition: [embeddings are the middle of the model](https://github.co
 
 To replicate this, the authors add n-gram embeddings to the byte embeddings. At each byte-position, they take the n-gram over the current and (n-1) previous bytes, and map it to an embedding. This n-gram embedding is added to the single-byte embedding.
 
-This presents a big problem: there is a gigantic number of n-grams over just a few bytes. There are 256 possible bytes at each position. How many possible unique combinations of length four are there, let alone of length eight? The numbers are ridiculously large.
+This presents a big problem: there is a gigantic number of n-grams over just a few bytes. There are 256 possible bytes at each position, so how many possible unique combinations of length four are there, let alone of length eight? The numbers are ridiculously large.
 
 To remedy this, the authors do two things:
 
@@ -74,15 +74,15 @@ To remedy this, the authors do two things:
 
 This makes the use of n-grams realistic. Still, their best setting uses 4 million total embeddings. Even with a hash function and mapping multiple n-grams to a single embedding, this uses up a lot of memory (and all of these embeddings must be trained!).
 
-However, the compression by mapping multiple n-grams to a single embedding should not be underestimated. First, because there are an absurd number of 8-grams, and secondly because that is not all they do. They actually add up the embeddings of 3-, 4-, 5-, 6-, 7-, and 8-grams! While they don't say why they do this, I think that it has a specific advantage: it helps to de-compress the embeddings. If multiple 8-grams share the same embedding, then the same 8-gram embedding could be created by multiple different 3-gram embeddings. This way, the different 8-grams can be distinguished even if they share embeddings. And with n-grams of mutliple sizes, this can be done even if the embeddings are shared between different n-gram sizes, as long as that sharing is done cleverly. How? Well an 8-gram could be made up of several different 3-grams, but while each of those shares embeddings with multiple other 8-grams and 3-grams, they don't share embeddings with *this* 8-gram or each other. By adding all the n-gram embeddings together, we can emulate having far more embeddings than we actually have. On the other hand, I very strongly doubt that this is sufficient to fully de-compress the embeddings.
+However, there they do something more: They actually add up the embeddings of 3-, 4-, 5-, 6-, 7-, and 8-grams! While they don't say why they do this, I think that it helps to de-compress the embeddings. If multiple 8-grams share the same embedding, then the same 8-gram embedding could be created by multiple different 3-gram embeddings. This way, the different 8-grams can be distinguished even if they share embeddings. And with n-grams of mutliple sizes, this can be done even if the embeddings are shared between different n-gram sizes, as long as that sharing is done cleverly. How? Well an 8-gram could be made up of several different 3-grams, but while each of those shares embeddings with multiple other 8-grams and 3-grams, they don't share embeddings with *this* 8-gram or each other. By adding all the n-gram embeddings together, we can emulate having far more embeddings than we actually have. On the other hand, I very strongly doubt that this is sufficient to fully de-compress the embeddings.
 
 Ultimately, though, it works very well, as you will see in the [results section](#results--benefits).
 
-> One last note: it is very important to add the n-gram embeddings to the byte embeddings, instead of replacing the byte embeddings with them. Because multiple n-grams are mapped to the same embedding, the model would otherwise not be able to distinguish between them.
+> One last note: it is very important to add the n-gram embeddings to the byte embeddings, instead of replacing the byte embeddings with them. This way, cross-attention will allow the BLT to distinguish between them, despite multiple byte-cominations mapping to the same n-grams embedding.
 
 ### Encoding bytes into patches: The Local Encoder
 
-We have an entropy model and the main Byte Latent Transformer. That BLT in turn consists of three parts: the Local Encoder, the Latent Transformer, and the Local Decoder.
+In the full setup, we have an entropy model and the main Byte Latent Transformer. That BLT in turn consists of three parts: the Local Encoder, the Latent Transformer, and the Local Decoder.
 
 **The Local Encoder is a simplified transformer.** It consists only of a self-attention layer followed by a cross-attention layer.
 
@@ -128,15 +128,21 @@ This works very similarly to the encoding process, as shown in the second part o
 
 **Initializing keys and values.** During training, we know the number of bytes in the next patch, and can thus prepare an appropriate number of queries to decode the queries (heads produced from the single patch) from. During inference, however, we don't know that number. So how do we know how many bytes to decode a patch into? And how do we best initialize the keys and values of the Local Decoder? While I haven't seen it explicitly stated in the paper, from Figure 5 I surmise they might use one of the following two methods.
 
+---
+
 Method 1.
 
 1. Use the entropy model to predict the next bytes autoregressively, until one of these predictions exceeds the entropy threshold (this is parallelized during training of course); use this to determine the number of bytes to decode
 2. Use the latents (hidden states) of the entropy model *for all those predictions* as the initial inputs to the Local Decoder, from which the keys and values are produced
 3. Use the cross-attention from the patch to fix the errors of the entropy model's predictions
 
---- create image for this ---
+I've sketched a little illustration of this method:
 
-This makes a strong assumption: the very weak entropy model is good enough at predicting the next byte that it can be used to determine an appropriate number of bytes to decode (and initialize and thus bias the Local Decoder inputs, but that's not a big deal because Cross-Attention can fix it). That makes me think that this is not the method they use.
+![Local Decoder: Method 1](images/LocalDecoderInitilizationAutoregressive.png)
+
+This method makes a strong assumption: the very weak entropy model is good enough at predicting the next byte that it can be used to determine an appropriate number of bytes to decode (and initialize and thus bias the Local Decoder inputs, but that's not a big deal because Cross-Attention can fix it). That makes me think that this is not the method they use.
+
+---
 
 Method 2.
 
@@ -146,11 +152,11 @@ Method 2.
 4. If the entropy model's prediction exceeds the entropy threshold, you are done with the patch
 5. Else, you append the predicted byte to the inputs and go to step 1 with the new input-byte sequence (and use the Local Decoder's kv-cache of the previous byte predictions in the current byte prediction)
 
---- create image for this ---
+Here is the sketch for method 2:
+
+![Local Decoder: Method 2](images/LocalDecoderInitilizationInterleaved.png)
 
 For this method, you have to move a bunch of data between the entropy model and the Local Decoder. Additionally, you have to work with only these two for a while, without the Local Encoder or Latent Transformer during inference, but during training, you can parallelize this all and can thus just use the teacher-forced entropy model's predictions all at once and do a single forward pass on the Local Encoder, Latent Transformer, and Local Decoder. I don't know how this switch, and the general setup, works with large-scale infrastructure. Ultimately, this method doesn't require the entropy model to be as good as the BLT, so it is likely the method of choice.
-
-> One question I have is whether at inference time, we should measure the entropy of the next-byte predictions of the BLT itself, and only keep the bytes up to and including the first difficult prediction. I don't think that this is done, but it might be a good idea. It would be reminicent of speculative decoding.
 
 ## Results & Benefits
 
@@ -275,7 +281,7 @@ We could simply use several entropy thresholds at the same time, and use cross-a
 - *Better adversarial robustness:* see above
 - *Reduction in the required n-gram size:* if we have two resolutions of patches, one with twice as many bytes as the other, then the high-resolution patches would give a rough estimate of an n-gram for the bytes in the low-resolution patch. Why? The low-resolution patch contains information about which bytes are in it, while the first high-resolution patch contains information about which bytes are in the first half of the low-resolution patch, and the second high-resolution patch contains information about which bytes are in the second half of the low-resolution patch. This gives an ordering of bytes. By doing this at different resolutions instead of just one patch-size and the bytes, we emulate the multi-depth n-grams that the BLT uses. This is especially true if we include a single self-attention layer for every patch resolution, like we do with the bytes.
 - *Better inclusion of multi-modality:* [see below](#multi-modality)
-- **Better token-level understanding.** In the end of the [better understanding of the content of patches](#better-understanding-of-the-content-of-patches) section, we saw that the BLT is worse than a BPE model at "Insert word" and "Delete word", which are token-level tasks. By mixing information at different levels of resolution, the gap might be closed.
+- *Better token-level understanding.* In the end of the [better understanding of the content of patches](#better-understanding-of-the-content-of-patches) section, we saw that the BLT is worse than a BPE model at "Insert word" and "Delete word", which are token-level tasks. By mixing information at different levels of resolution, the gap might be closed.
 
 While this comes at the cost of increased complexity and (very slightly) increased FLOPs, I believe that it is worth trying.
 
@@ -287,8 +293,6 @@ I suggest going from the lowest to the highest resolution, as we are already doi
 
 We want to end up in the lowest-resolution setting, to minimize sequence length, so this has to go to the beginning anyway. Then, mixing higher- and higher-resolution patches into the main patches, up to and including bytes, seems like it would provide the most consistent refinement of the Latent Transformer's inputs.
 
---- create image for this ---
-
 Of course, we could instead mix different resolution patches in a pairwise manner, then mix the results of that mixing, etc. But this makes no more semantic sense than mixing the patches from lowest to highest resolution, and would be more complicated.
 
 ### Multi-modality
@@ -298,9 +302,9 @@ One reaction I've seen online right after the paper was published to arXiv is th
 The obvious answer is to encode pixel values (from 0 to 255 per channel) as bytes. A big question right here: *What would be the equivalent to n-gram embeddings for pixels?* Some possibilities:
 
 - Encode every combination of pixel values over the channels of a pixel as an embedding.
-- Run a CNN or other locally-acting model over groups of pixels. For a CNN, the 3x3 or 5x5 matrix would act several times on each pixel (unless stride is high), so we could capture more information by adding the outputs of the model from all positions in which the current pixel is included in the kernel. Then, shape this correctly and add it to the pixel embedding.
+- Run a CNN or other locally-acting model over groups of pixels. For a CNN, the 3x3 or 5x5 matrix would act several times on each pixel (unless stride is high), so we could capture more information by adding the outputs of the model from all positions in which the current pixel is included in the kernel. Then, shape this correctly and add it to the pixel embedding. This is similar to using n-grams with different n.
 
-You could of course vary both of these wildly, and combine them if you want. However, at the end of the day, you would still have hundreds of thousands to millions of pixels at the input of the Local Encoder. Yes, [pixels in images are highly redundant](https://arxiv.org/abs/2111.06377), so we could choose a very high entropy threshold and group the pixels into large patches&mdash;as large as or even larger than the patches we normally use for images, in fact. But this would still be costly because of the Local Encoder's large input size, and&mdash;if we output in pixel space&mdash;the Local Decoder's large output size. At some point, a million forward passes for a single image is too expensive even with a really small model. And this doesn't even mention the entropy model, which I don't even know how to design here. I guess an aggressive sliding-window attention setup would help, but what would that do to performance?
+You could of course vary both of these ideas wildly, and combine them if you want. However, at the end of the day, you would still have hundreds of thousands to millions of pixels at the input of the Local Encoder. Yes, [pixels in images are highly redundant](https://arxiv.org/abs/2111.06377), so we could choose a very high entropy threshold and group the pixels into large patches&mdash;as large as or even larger than the patches we normally use for images, in fact. But this would still be costly because of the Local Encoder's large input sequence length, and&mdash;if we output in pixel space&mdash;the Local Decoder's large output sequence length. At some point, a million forward passes for a single image is too expensive even with a really small model. And this doesn't even mention the entropy model, which I don't even know how to design here. I guess an aggressive sliding-window attention setup would help, but what would that do to performance?
 
 The obvious alternative is to just use a Mixture of Tokenizers and project the regular old image patch embeddings into the Local Encoder's input space. You could even use more, smaller patches, and then pool them into larger patches and use the whole entropy-model-and-cross-attention mechanism. This seems like a good compromise, and a likely improvement over the status quo.
 
@@ -320,17 +324,20 @@ The answer I came to is "yes, but this is an inherently sequential process becau
 
 It should be possible to train the model to make use of that with just a bit of post-training, where the inefficiency of the sequential process is acceptable. (Maybe we wouldn't even need post-training, but my bet is that we do.)
 
-#### End-to-end training
+#### Using the BLT's entropy
 
-There is a good reason for keeping the entropy model and the BLT separate: patching requires synchronization, which is very bad for large models. The information flow in the BLT is this (during training):
+Instead of using the entropy model to determine the boundaries of the patches, we could use the BLT's entropy directly. This is not realistic for pre-training, because it cannot be parallelized, but with a tiny bit of post-training, it could be done. Then, instead of relying on the entropy estimates of a weak approximation of the BLT (in the form of the entropy model), we could rely on the BLT's own entropy estimates.
 
-1. Predict the next byte with the entropy model
-2. Determine the patch boundaries from the prediction entropy and initialize patches from the byte embeddings according to those boundaries &larr; synchronization bottleneck (everything up to and including this is done in the dataloader at inference time)
-3. Propagate the patches, bytes, and entropy model latents to the BLT
-4. Go through the Local Encoder, Latent Transformer, and Local Decoder
-
-If we could post-train the entropy model with the gradients from the BLT
-
-...train end-to-end through entropy model's latents...might improve entropy estimates and Local Enc & Dec inits...
+We would still need the entropy model to initialize the Local Decoder's keys and values, though. At least I think so; there is a low probability that initializing them with the outputs of the Local Encoder would work as well; or simply copying the output patch from the Latent Transformer and a few more self-attention layers in the Local Decoder. That, however, is an empirical question.
 
 ## Citation
+
+```bibtex
+@misc{snimu2024blt,
+    title={On the Byte Latent Transformer},
+    author={Sebastian M\"uller},
+    year={2024},
+    month={dec},
+    url={https://github.com/snimu/blog/blob/main/contents/byte-latent-transformer/article.md}
+}
+```
