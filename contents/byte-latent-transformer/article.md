@@ -23,6 +23,14 @@ The basic setup is this:
 3. Use a normal, large transformer to predict the next patch
 4. Use cross-attention again to decode that next-patch prediction into the next group of bytes
 
+Step 1 happens entirely in the dataloader, asynchronously from the rest of the model.
+
+Figure 2 gives a good overview of the overall architecture:
+
+![Architecture overview](images/Figure2_ArchitectureOverview.png)
+
+Let's go through each part of the architecture.
+
 ### Grouping bytes into tokens
 
 There are many ways to group bytes into tokens. However, a very promising approach is to use the information that is already available at the model outputs. This was popularized by [entropix](https://github.com/xjdr-alt/entropix), which uses the uncertainty of the model's next-token prediction (in normal transformers using BPE tokens) to adjust their sampling strategy. For example, always pick the most likely token when the model is consistently confident about its predictions, but insert "thinking" tokens (like "wait" or "...") manually into its context window when it is consistently uncertain.
@@ -37,7 +45,13 @@ Thus, the authors first train this tiny "entropy model" on the same dataset and 
 
 > The entropy is low if the probability mass of the outputs is very concentrated&mdash;the model is confident about which is the most likely next byte&mdash;and high if the probability mass is spread out.
 
---- insert entropy grouping figure here ---
+The method becomes apparent from Figure 4 of the BLT paper:
+
+![Entropy diagram](images/Figure4_EntropyDiagram.png)
+
+Note that the byte they show on the x-axis is the *current* byte, while the entropy shown in the diagram is the *next* byte's entropy. This results in the following patches (taken from Figure 3):
+
+![Patches](images/Figure3_EntropyText.png)
 
 By controlling that threshold, we can control how many bytes are grouped into a single patch on average.
 
@@ -64,7 +78,7 @@ However, the compression by mapping multiple n-grams to a single embedding shoul
 
 Ultimately, though, it works very well, as you will see in the [results section](#results--benefits).
 
-One last note: it is very important to add the n-gram embeddings to the byte embeddings, instead of replacing the byte embeddings with them. Because multiple n-grams are mapped to the same embedding, the model would otherwise not be able to distinguish between them.
+> One last note: it is very important to add the n-gram embeddings to the byte embeddings, instead of replacing the byte embeddings with them. Because multiple n-grams are mapped to the same embedding, the model would otherwise not be able to distinguish between them.
 
 ### Encoding bytes into patches: The Local Encoder
 
@@ -90,7 +104,9 @@ So in the end, the choice between longer-range n-grams and cross-attention is a 
 
 > Sidenote: I suspect that focussing more on cross-attention is more scalable, and ultimately cleaner, but n-grams might be needed for the entropy model (and using short n-grams is obviously no problem).
 
---- image of Local Encoder ---
+The paper provides a diagram of the Local Encoder in Figure 5:
+
+![Local Encoder](images/Figure5_LocalEncoder.png)
 
 ### The Latent Transformer
 
@@ -104,9 +120,9 @@ Let's repeat what information is present at the input of each patch:
 
 ### Decoding bytes from patches: The Local Decoder
 
-This works very similarly to the encoding process.
+This works very similarly to the encoding process, as shown in the second part of Figure 5:
 
---- image of Local Decoder ---
+![Local Decoder](images/Figure5_LocalDecoder.png)
 
 **The Local Decoder is larger than the Local Encoder.** It is multiple layers deep. I speculate that this is because at the input, most information is provided by the embedding layer and pooling of bytes, while unpooling of bytes is not possible (merging bytes into a patch is easy because the whole point is to combine their information, but how would you know how to split a patch? Which byte would you write which piece of information into? That's what cross-attention is for!). Thus, the Local Decoder must spend more effort decoding the patches into bytes than the Local Encoder must spend encoding them.
 
@@ -148,11 +164,15 @@ In most tasks, the BLT learns about the same amount of information per training 
 
 When you train on the same number of FLOPs, but scale the model and learning bytes / tokens to be Chinchilla-optimal for a BPE model (so ca. 20 tokens per parameter), you will get very similar results between the two models:
 
---- Figure 6 ---
+![Bits per Byte: Compute Optimal](images/Figure6_BitsPerByteComputeOptimal.png)
+
+> They include results for the inferior space patching on the left, and compare not only to Llama, but also to Megabyte, another byte-level model. "ps" stands for "patch size".
 
 But if you compare the two models on the same number of training FLOPs, at a constant *inference FLOP budget*, the BPE model has a much better scaling curve:
 
---- Figure 1 ---
+![Bits per Byte: Constant inference budget](images/Figure1_BitsPerByteConstantInferenceBudget.png)
+
+> Notice that the BLT model is larger at the same number of training bytes and FLOPs. Also notice that in the beginning&mdash;having consumed only few training bytes&mdash;the BLT is worse than the BPE model, but becomes better at the same FLOPs quickly, and keeps improving relative to the BPE model. In other words, its scaling laws are superior.
 
 This is because can make the BLT model much larger than the BPE model for the same number of inference FLOPs&mdash;because it has, on average, larger patches. When you increase training FLOP budget by increasing the model size, you also increase the average patch size, which means that you can scale your model by a larger factor than you would think. Now, you don't have a Chinchilla-optimal ratio of tokens to parameters, but you have a far stronger model at the same cost as the Chinchilla-optimal BPE model.
 
@@ -174,7 +194,7 @@ This enables several abilities.
 
 **CUTE.** The [CUTE benchmark](https://arxiv.org/abs/2409.15452) is a set of tasks that require the model to make byte-level edits to an input. Some examples from Figure 7 of the BLT-paper:
 
---- Figure 7 ---
+![CUTE](images/Figure7_CUTE.png)
 
 Some comments on these:
 
@@ -184,7 +204,11 @@ Some comments on these:
 
 Here are the results for all these byte-level tasks (Table 3 of the BLT paper):
 
---- Table 3 ---
+![Byte level task results](images/Table3_CUTEResults.png)
+
+> Bold results are the better results between Llama 3 and the BLT; underlined results are best among all three models.
+
+Note that the BLT is better than Llama 3 at every single byte-level task except "Insert word" and "Delete word". I believe that that's because those are actually token-level tasks. If done on common tokens, it gives BPE-trained models an advantage over byte-level models. It would be desirable for the BLT to also be better at these tasks, or at least reach parity with BPE models. Maybe this will happen on its own as the Latent Transformer and its training dataset are scaled up.
 
 #### Adversarial robustness
 
@@ -197,9 +221,9 @@ While the individual components were all mentioned in the paper, I haven't seen 
 
 Translation from English into another language, and vice versa, is both easier for the BLT than for a BPE model, see Table 4 of the BLT paper:
 
---- Table 4 ---
+![Translation results](images/Table4_Translation.png)
 
-My guess for why that is is that tokenizers are usually specialized for English, and models mostly trained in English. If you a tokenizer for a low-resource language, one of two things will happen:
+My guess for why the BLT is better at translation than BPE models is that tokenizers are usually specialized for English, and models mostly trained in English. If you a tokenizer for a low-resource language, one of two things will happen:
 
 1. The tokenizer contains tokens that are specialized to the language but are undertrained and thus weaken model performance in general
 2. The tokenizer doesn't contain such tokens, and has to construct the words from other tokens; this has the effect of much longer sequences in the low-resource lnaguage than in English, which might confuse the model
@@ -251,6 +275,7 @@ We could simply use several entropy thresholds at the same time, and use cross-a
 - *Better adversarial robustness:* see above
 - *Reduction in the required n-gram size:* if we have two resolutions of patches, one with twice as many bytes as the other, then the high-resolution patches would give a rough estimate of an n-gram for the bytes in the low-resolution patch. Why? The low-resolution patch contains information about which bytes are in it, while the first high-resolution patch contains information about which bytes are in the first half of the low-resolution patch, and the second high-resolution patch contains information about which bytes are in the second half of the low-resolution patch. This gives an ordering of bytes. By doing this at different resolutions instead of just one patch-size and the bytes, we emulate the multi-depth n-grams that the BLT uses. This is especially true if we include a single self-attention layer for every patch resolution, like we do with the bytes.
 - *Better inclusion of multi-modality:* [see below](#multi-modality)
+- **Better token-level understanding.** In the end of the [better understanding of the content of patches](#better-understanding-of-the-content-of-patches) section, we saw that the BLT is worse than a BPE model at "Insert word" and "Delete word", which are token-level tasks. By mixing information at different levels of resolution, the gap might be closed.
 
 While this comes at the cost of increased complexity and (very slightly) increased FLOPs, I believe that it is worth trying.
 
