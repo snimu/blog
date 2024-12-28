@@ -41,7 +41,7 @@ There is just one problem with this: if you use a model's uncertainty about the 
 
 So instead, the authors train a second next-byte prediction model first. It is a tiny transformer that works exclusively on bytes and is very efficient, because it can use sliding-window attention (&rarr; the attention matrix is not a problem despite very long byte sequences; though this is optional), and has a very small parameter count (&rarr; very little compute per byte, because most cost in short sequences comes from the MLP, not the Attention mechanism). Because that model is trained on the same dataset and task as the main model we want to train, it is safe to assume that its uncertainty about the next byte will correspond closely to the main model's uncertainty.
 
-Thus, the authors first train this tiny "entropy model" on the same dataset and task as the main model, and then use its next-byte prediction uncertainty to group bytes into tokens. They specifically use the entropy of the output distribution at each position as the uncertainty estimate, and group bytes by starting a new patch after every byte for which the next-byte prediction entropy exceeds some threshold.
+Thus, the authors first train this tiny "entropy model" on the same dataset and task as the main model, and then use its next-byte prediction uncertainty to group bytes into tokens. They specifically use the entropy of the output distribution at each position as the uncertainty estimate, and group bytes by starting a new patch after every byte for which the next-byte prediction entropy exceeds some threshold. In other words, a byte which is itself easy to predict but whose next-byte prediction is hard ends a patch; if a byte is itself difficult to predict, it begins a new patch.
 
 > The entropy is low if the probability mass of the outputs is very concentrated&mdash;the model is confident about which is the most likely next byte&mdash;and high if the probability mass is spread out.
 
@@ -133,7 +133,7 @@ This works very similarly to the encoding process, as shown in the second part o
 Method 1.
 
 1. Use the entropy model to predict the next bytes autoregressively, until one of these predictions exceeds the entropy threshold (this is parallelized during training of course); use this to determine the number of bytes to decode
-2. Use the latents (hidden states) of the entropy model *for all those predictions* as the initial inputs to the Local Decoder, from which the keys and values are produced
+2. Use the hidden states of the entropy model *for all those predictions* as the initial inputs to the Local Decoder, from which the keys and values are produced
 3. Use the cross-attention from the patch to fix the errors of the entropy model's predictions
 
 I've sketched a little illustration of this method:
@@ -147,7 +147,7 @@ This method makes a strong assumption: the very weak entropy model is good enoug
 Method 2.
 
 1. Produce a byte prediction with the entropy model
-2. Use the latents of that prediction as the initial values for the keys and values of the Local Decoder
+2. Use the hidden states of that prediction as the initial values for the keys and values of the Local Decoder
 3. Correct the prediction using the patch prediction and the Local Decoder
 4. If the entropy model's prediction exceeds the entropy threshold, you are done with the patch
 5. Else, you append the predicted byte to the inputs and go to step 1 with the new input-byte sequence (and use the Local Decoder's kv-cache of the previous byte predictions in the current byte prediction)
@@ -254,13 +254,13 @@ It is possible and even easy to convert existing BPE models into a BLT. The tric
 
 I want to collect a few ideas of mine and put them down here. They are extremely speculative, and not part of the paper, so you can skip them if you want. Read on at your own peril.
 
-### Using the entropy model's latents as inputs to the Local Encoder
+### Using the entropy model's hidden states as inputs to the Local Encoder
 
-We are already using the entropy model's latents as inputs to the Local Decoder. Why not use them as inputs to the Local Encoder as well?
+We are already using the entropy model's hidden states as inputs to the Local Decoder. Why not use them as inputs to the Local Encoder as well?
 
-The obvious answer is that the entropy model does next-byte prediction, so it's unclear if there is sufficient information about the current byte in those latents. It might actually degrade performance. However, it should be possible to add them to the byte-embeddings, as we do for the n-gram embeddings.
+The obvious answer is that the entropy model does next-byte prediction, so it's unclear if there is sufficient information about the current byte in those hidden states. It might actually degrade performance. However, it should be possible to add them to the byte-embeddings, as we do for the n-gram embeddings.
 
-And this also explains why we would want to use them at all: we could reduce the length of n-grams we use so that we have a smaller total vocabulary. The n-grams are there to impart information about the relationship between the previous n bytes into the current byte, but a transformer can obviously do the same. So reducing n and using a smaller vocabulary would be a good trade-off, if the latents can successfully be used (which is unclear to me).
+And this also explains why we would want to use them at all: we could reduce the length of n-grams we use so that we have a smaller total vocabulary. The n-grams are there to impart information about the relationship between the previous n bytes into the current byte, but a transformer can obviously do the same. So reducing n and using a smaller vocabulary would be a good trade-off, if the hidden states can successfully be used (which is unclear to me).
 
 ### Mixture of Tokenizers
 
@@ -297,9 +297,9 @@ Of course, we could instead mix different resolution patches in a pairwise manne
 
 ### Multi-modality
 
-One reaction I've seen online right after the paper was published to arXiv is that this is amazing because it would allow for byte-level multi-modality. I'm not so sure about this, but here are some thoughts about how this might be done.
+One reaction I've seen online right after the paper was published to arXiv is that this is amazing because it would allow for byte-level multi-modality. I'm not so sure about this, but here are some thoughts about how this might be done for images.
 
-The obvious answer is to encode pixel values (from 0 to 255 per channel) as bytes. A big question right here: *What would be the equivalent to n-gram embeddings for pixels?* Some possibilities:
+The easy answer is to encode pixel values (from 0 to 255 per channel) as bytes. A big question right here: *What would be the equivalent to n-gram embeddings for pixels?* Some possibilities:
 
 - Encode every combination of pixel values over the channels of a pixel as an embedding.
 - Run a CNN or other locally-acting model over groups of pixels. For a CNN, the 3x3 or 5x5 matrix would act several times on each pixel (unless stride is high), so we could capture more information by adding the outputs of the model from all positions in which the current pixel is included in the kernel. Then, shape this correctly and add it to the pixel embedding. This is similar to using n-grams with different n.
