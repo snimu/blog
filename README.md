@@ -4,6 +4,9 @@ Markdown files serving as my blog.
 
 Table of Contents (dates as yyyy-mm-dd):
 
+- [On the Byte Latent Transformer](contents/byte-latent-transformer/article.md)
+  - 2024-12-31
+
 - [Embeddings are in the middle of the model](contents/embeddings-thoughts/article.md)
   - 2024-12-24
 
