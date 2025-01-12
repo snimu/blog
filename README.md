@@ -4,6 +4,9 @@ Markdown files serving as my blog.
 
 Table of Contents (dates as yyyy-mm-dd):
 
+- [COCONUT: Parallel pre-training](contents/COCONUT-parallel-pretraining/article.md)
+  - 2025-01-12
+
 - [On the Byte Latent Transformer](contents/byte-latent-transformer/article.md)
   - 2024-12-31
 
