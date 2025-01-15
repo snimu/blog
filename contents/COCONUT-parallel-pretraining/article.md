@@ -17,8 +17,7 @@ A parallelized, pre-training-friendly approach to COCONUT would be preferable. I
 Here is the process I envision:
 
 1. Do a normal forward pass through the model and calculate the loss and gradients
-2. Repeat the forward pass, but:
-    - Replace the inputs at some positions with the previous-position hidden-state-outputs
+2. Repeat the forward pass, but replace the inputs at some positions with the previous-position hidden-state-outputs
 3. Calculate the loss & gradients again
 4. Only now, update the model parameters
 
