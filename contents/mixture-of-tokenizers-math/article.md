@@ -172,6 +172,26 @@ These three facts make me believe the following:
 
 One concern that might come is that most real tokenizers use `dpt=3` at most. However, I believe that this does not lessen the positive takeaways of these results: In reality, the MoT isn't only applied to math, and even where it is, it won't just be two-number addition. This mean that what's important is that the MoT is better in domains where memorization doesn't work, and that's what the results suggest. (On a related note, I expect this to be especially relevant for reasoners / test-time-scaling methods)
 
+## Heatmap of L1 distance to ground truth result
+
+The full-number accuracy is a good metric for seeing how well a model performs on math. However, there is the possibility that model A will have 50% accuracy, but in the 50% of cases where it is wrong, it is extremely wrong, while model B will have only 30% accuracy, but be very close to the correct answer in the other 70%.
+
+The latter would point to a model that generalizes well, but hasn't memorized results much. It also points to a model that would rapidly improve with some more training data, as opposed the former option.
+
+To measure this, I will plot the L1 distance to the ground truth result.
+
+Here is the heatmap of the mean of the last L1 distance to the ground truth result over 5 attempts each; specifically, the MoT-L1 distance divided by the Baseline-L1 distance (lower means that the MoT is better):
+
+![Heatmap of L1 distance to ground truth result](images/heatmap__val_l1s__mean__last_n_samples-1.png)
+
+The MoT is much better than the Baseline here! Even for `dpt=3`, `tpn=2` and `tpn=3`, where the Baseline achieves significantly higher accuracy, the MoT has a lower L1 distance to the ground truth result. This further supports the hypothesis that the MoT is better at generalizing.
+
+For completeness, here is the same plot for the median:
+
+![Heatmap of L1 distance to ground truth result (median)](images/heatmap__val_l1s__median__last_n_samples-1.png)
+
+It shows very similar results.
+
 ## Discussion
 
 The MoT outperforms the Baseline where it matters: in regimes where memorization doesn't work.
@@ -205,7 +225,7 @@ As for the math-work, I want to try to train models to produce digit-output in a
 Additionally, I want to try the following two experiments:
 
 1. Use multiplication, not just addition.
-2. See if the models generalize to more `dpt` and `tpn` settings.
+2. See if the models generalize to larger `dpt` and `tpn` settings.
 
 I have further ideas for future experiments (though I give no guarantee that I will ever actually perform any of these):
 
