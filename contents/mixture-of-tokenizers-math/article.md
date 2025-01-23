@@ -20,7 +20,7 @@ Table of contents:
 
 I trained two models on math data:
 
-- **The Baseline** &mdash; A normal transformer. To make up for the additional parameters in the digit embeddings, the attention layer applied to the digits, and the cross-attention in the MoT, I added one more transformer block to the baseline. Because that block includes a MLP, the baseline always has slightly more parameters than the MoT.
+- **The Baseline** &mdash; A normal transformer. To make up for the additional parameters in the digit embeddings, the attention layer applied to the digits, and the cross-attention in the MoT, I added one more transformer block to the baseline. Because that block includes a MLP, the baseline always has slightly more parameters than the MoT. This means that there is no way that the results of the MoT are over-estimated relative to the Baseline.
 - **The MoT** &mdash; A normal transformer, but the token embeddings are enriched with digit-level embeddings through cross-attention. The digit embeddings are first mixed with a causal attention layer. I believe that this could use sliding window attention for long sequences, but for the short sequences used in my experiments, I use full causal attention. The cross-attention is masked so that each token only sees the digits that make it up (this constraint could also be relaxed, but seeing if the most restrictive way to impart information into the transformer works is intersting to me).
 
 ![MoT for math](images/mot-math.png)
@@ -55,7 +55,9 @@ Here are three examples of tokens and their corresponding digits at different `d
 
 ![Tokens and digits at different `dpt` and `tpn` settings](images/mot-tokenization.png)
 
-I vary `dpt` and `tpn` over the following ranges: Every combination of `dpt` $\in [2, 4]$ and `tpn` $\in [1, 3]$. I run every setting five times to get statistically significant results. For every MoT-run, there is a Baseline run with the exact same data-mixture seen in the exact same order, against the exact same validation data, and even with the exact same seed.
+> On padding: There is a choice between left-padding (`[<pad>, <pad>, 1]`) and right-padding (`[1, <pad>, <pad>]`). Left-padding is meant to align digits. If the number $1234$ is split in two: $123$ and $4$, then the digits corresponding to the first token are $[1, 2, 3]$; but the digits corresponding to the second are $[\mathrm{pad}, \mathrm{pad}, 4]$. Now compare this to the token $400$: which would be turned into $[4, 0, 0]$. The four in the former is at the last position to distinguish it from a 400. On the other hand, right-padding better aligns the digits with the positional embeddings: if a number is split as shown above, then putting padding between the first three digits and the single last digit will increase the distance between them as measured by the positional embeddings. I have not done any experiments on the choice between the two, and just chose the padding strategy that makes the most sense to me.
+
+I vary `dpt` and `tpn` over the following ranges: Every combination of `dpt` $\in [2, 4]$ and `tpn` $\in [1, 3]$. I run every setting five times to get statistically significant results. For every MoT-run, there is a Baseline run with the exact same data-mixture seen in the exact same order and for the exact same number of steps, against the exact same validation data, and even with the exact same seed.
 
 The larger `dpt` and `tpn`, the more steps I trained for. This is to ensure that the models learn addition to a meaningful accuracy.
 
@@ -113,6 +115,14 @@ And for `dpt=2`:
 
 The baseline still clearly outperforms the MoT here.
 
+#### The outlier
+
+Just to convince you that the results at `dpt=4` and `tpn=2` are due to outliers, here are the accuracies of all the runs at these settings, together with their mean values:
+
+![Outliers](images/plot_digits_vs_tokens__val_full_accuracies__mean__mod-None__all__dpt-4__tpt-2.png)
+
+The Baseline experiences one crazy outlier that pulls its mean way up, while the MoT actually experiences one outlier that pulls its mean down a bit. I don't think that these outliers are very meaningful&mdash;they are just winning lottery tickets&mdash;and so the median values are a better measure of the trends. I will still include the mean values in all plots, though.
+
 ### Heatmap of final full-number accuracy
 
 To see the trends in the final full-number accuracy more clearly, we can look at the accuracy of the MoT relative to the Baseline; in other words, the Mot-accuracy divided by the Baseline-accuracy.
@@ -138,11 +148,11 @@ To do a proper analysis of these patterns, it is helpful to look at the raw data
 
 | dpt | tpn | times tok. seen | times eq. seen | mean val acc (MoT) | mean val acc (Baseline) | median val acc (MoT) | median val acc (Baseline) |
 |---:|---:|---:|---:|---:|---:|---:|---:|
-| 2 | 1 | 10,240 | 51.200 | 1.000 | 1.000 | 1.000 | 1.000 |
-| 2 | 2 | 40,960 | 25.600 | 0.122 | 0.409 | 0.122 | 0.377 |
-| 2 | 3 | 61,440 | 11.378 | 0.000 | 0.111 | 0.000 | 0.006 |
-| 3 | 1 |  4,096 |  2.048 | 0.999 | 0.699 | 1.000 | 0.757 |
-| 3 | 2 | 20,480 |  1.280 | 0.155 | 0.481 | 0.161 | 0.616 |
+| 2 | 1 | 10,240 | 51.2 | 1.0 | 1.0 | 1.0 | 1.0 |
+| 2 | 2 | 40,960 | 25.6 | 0.122 | 0.409 | 0.122 | 0.377 |
+| 2 | 3 | 61,440 | 11.378 | 0.0 | 0.111 | 0.0 | 0.006 |
+| 3 | 1 |  4,096 |  2.048 | 0.999 | 0.699 | 1.0 | 0.757 |
+| 3 | 2 | 20,480 |  1.28 | 0.155 | 0.481 | 0.161 | 0.616 |
 | 3 | 3 | 61,440 |  1.138 | 0.156 | 0.439 | 0.094 | 0.209 |
 | 4 | 1 |  2,048 |  0.102 | 0.999 | 0.107 | 0.999 | 0.109 |
 | 4 | 2 |  8,192 |  0.051 | 0.106 | 0.113 | 0.139 | 0.022 |
@@ -160,7 +170,7 @@ These three facts make me believe the following:
 - When the baseline outperforms the MoT, it is to a large degree it is better at memorizing equations. This might be due to the additional parameters, or the architecture itself.
 - Access to digit-level information helps models generalize. The MoT works well.
 
-One concern that might come is that most real tokenizers use `dpt=3` at most. However, I believe that this does not lessen the positive takeaways of these results: In reality, the MoT isn't only applied to math, and even where it is, it won't just be two-number addition. This mean that what's important is that the MoT is better in domains where memorization doesn't work, and that's what the results show. (On a related note, I expect this to be especially relevant for reasoners / test-time-scaling methods)
+One concern that might come is that most real tokenizers use `dpt=3` at most. However, I believe that this does not lessen the positive takeaways of these results: In reality, the MoT isn't only applied to math, and even where it is, it won't just be two-number addition. This mean that what's important is that the MoT is better in domains where memorization doesn't work, and that's what the results suggest. (On a related note, I expect this to be especially relevant for reasoners / test-time-scaling methods)
 
 ## Discussion
 
@@ -173,6 +183,11 @@ This is:
 - Maybe from seeing lack of interaction between specific tokens
 
 And thus, I would call these experiments highly successful.
+
+Of course, I need to stress again that these results are preliminary, from tiny models, and on limited and very specific data. Why do I believe that the results will generalize?
+
+1. There is plenty of work showing that byte-level models can work very well (and digits are just specific bytes).
+2. In contrast to those, the MoT still uses tokens, which means that it is much closer to a normal transformer&mdash;especially in this setting, where the outputs are tokens, not bytes.
 
 ## Next steps
 
@@ -187,7 +202,18 @@ As for the math-work, I want to try to train models to produce digit-output in a
 1. Do what I did above, but instead of decoding the hidden states into tokens, I copy them `dpt` times each so that I get a much longer sequence. Then, I run one or more attention layers on this sequence and decode into digits, which I train against. I won't use an MLP on the digits to avoid running that many parameters over the now much-longer sequence (this is an important point of the whole MoT design).
 2. Initialize output digits to the `<pad>` embedding. Then, incorporate the output hidden states of the token transformer into the digits using cross-attention. After each cross-attention step, run self-attention over both the token-level-hidden-states and the digit-level-hidden-states. This self-attention can have a sliding window for efficiency, though I likely won't implement it for these very short sequences, exactly like I did for the inputs.
 
-In my first experiments, I will mostly try to see if this further improves performance relative to the input-only MoT as shown in this article. In later experiments, I might experiment with turning this into multi-token prediction by simply decoding each token-level hidden-state into `n * dpt`.
+Additionally, I want to try the following two experiments:
+
+1. Use multiplication, not just addition.
+2. See if the models generalize to more `dpt` and `tpn` settings.
+
+I have further ideas for future experiments (though I give no guarantee that I will ever actually perform any of these):
+
+- I might experiment with turning this into multi-token prediction by simply decoding each token-level hidden-state into `n * dpt`.
+- Scale up the models.
+- I might compare left-padding to right-padding.
+- I might compare token- to digit-embeddings. Maybe there is even a way to tie the digit-embeddings to the token-embeddings? After all, each digit has a corresponding token.
+- Try to implement a sliding window self-attention for the digit-embeddings. I'm not sure if short sequences like in two-digit addition are the right setting for this, though.
 
 Updates for these will be forthcoming.
 
