@@ -63,6 +63,8 @@ The larger `dpt` and `tpn`, the more steps I trained for. This is to ensure that
 
 In only ever calculate a loss against the target number (e.g., in the equation $123 + 456 = 579$, only the prediction for $579$ would have a loss calculated). This is because the other numbers are random, and the plus and equals signs always the same.
 
+In these experiments, I only work with non-negative numbers.
+
 ## Results
 
 In summary, the results look very promising; MoT improves performance on addition significantly *when there are many digits per token*. This is mostly a function of how many digits are in a token, and how often an equation is seen: the MoT shows better performance when memorization is not possible. The results point towards improvements in a more general text domain from MoT.
@@ -143,6 +145,31 @@ There are two factors I want to look into more closely:
 2. If there are many possible equations per token&mdash;`dpt` and `tpn` are large&mdash;then the models need to generalize addition in order to achieve high accuracy. If, on the other hand, each possible equation is seen once or more during training, then good accuracy on test can be trivially achieved by memorization.
 
 For each metric, I again take the mean over the five runs per setting.
+
+Here is how I calculate the times a token and equation are seen, in Python code:
+
+```python
+# How many total equations are seen in training?
+num_equations_seen = batchsize * num_steps
+
+# How many unique tokens can be constructed with `dpt` digits?
+# 0 + max num that can be constructed with dpt digits
+num_unique_tokens = int("9" * dpt) + 1
+
+# How many total tokens are seen in training?
+# underestimate because the model also sees some result tokens
+num_tokens_seen = num_equations_seen * tpn * 2
+
+# Number of possible equations
+# num_unique_tokens * tpn is maximum number per operand
+# ^ 2 to get every possible combination of operands
+# This counts 1+2 and 2+1 as unique equations; if we don't want that, we'd have to divide by 2 (not done because it makes little difference)
+num_possible_equations = (num_unique_tokens * tpn) ** 2
+
+# Times token seen and times equation seen
+times_token_is_seen_in_training = num_tokens_seen / num_unique_tokens
+times_eq_seen_in_training = num_equations_seen / num_possible_equations
+```
 
 To do a proper analysis of these patterns, it is helpful to look at the raw data:
 
@@ -225,7 +252,7 @@ As for the math-work, I want to try to train models to produce digit-output in a
 Additionally, I want to try the following two experiments:
 
 1. Use multiplication, not just addition.
-2. See if the models generalize to larger `dpt` and `tpn` settings.
+2. See if the models generalize to larger `dpt` and `tpn` settings by using multiple validation sets (with the same `dpt` setting because otherwise I'd need a bigger embedding layer that is never trained, but higher `tpn` would be fine).
 
 I have further ideas for future experiments (though I give no guarantee that I will ever actually perform any of these):
 
