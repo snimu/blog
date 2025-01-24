@@ -4,9 +4,21 @@ I have a crazy idea for doing large decentralized, asynchronous training of tran
 
 ## Introduction
 
-... one sentence or two about what this is about ...
+I will present a method for training an (almost) arbitrary number of LLMs independently from each other, then put them together to form a single large LLM &mdash; a model stack, if you will.
 
-... why do this? ...  Quickly point to EpochAI's scalinng limits article, plot, and reasoning within; Async training is a huge advantage of test-time scaling (train on data, while asynchronously producing more data with previous model + verifier); this async-training regime is very similar to "reasoning"-style post training in this regard and the two can be easily combined; and it can, of course, also be combined with other methods of decentralized training; naively scaling models up requires extremely large batch sizes, which is suboptimal, while more smaller batches tend to be better.
+Why would that be good?
+
+**Reason 1:** [Data movement puts a hard limit on AI scaling](https://epoch.ai/blog/data-movement-bottlenecks-scaling-past-1e28-flop). The larger the model, the more parallelized it has to be. The more parallelized the model, the more costs are dominated by communication overhead. Here is a relevant plot from the linked article by EpochAI:
+
+![Data movement plot](images/flop-utilization-rate.png)
+
+If models can be trained asynchronously, then there needs to be no data movement between them. Therefore, it will make training much more scalable and efficient.
+
+This is very reminicent of test-time scaling models, where you produce many data points through forward passes, then do a single backward pass to update the model parameters (roughly speaking). Both methods can, of course, be combined.
+
+It is also reminiscent of other efforts for decentralized training, though those usually use low-communication optimizers&mdash;which, again, can be combined with the method described in this article, but are different.
+
+I want to stress from the start that we will ultimately still have to do inference on the entire model stack at once, which somewhat limits scaling, but avoiding this during training is already a major win (if it works, this is all just speculation).
 
 ## Basic concept
 
