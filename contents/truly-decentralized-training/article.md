@@ -207,3 +207,15 @@ What does this give us? ... (split between causal models and bidirectional model
 
 - Does splitting the head improve performance in multi-modal settings?
 - Does looping hidden states during pre-training, followed by COCONUT-style post-training, improve latent thinking as opposed to COCONUT-style post-training only? Does splitting the head here improve this?
+
+## Citation
+
+```bibtex
+@misc{snimu2024decentralized,
+    title={Truly decentralized training},
+    author={Sebastian M\"uller},
+    year={2025},
+    month={jan},
+    url={https://github.com/snimu/blog/blob/main/contents/truly-decentralized-training/article.md}
+}
+```
