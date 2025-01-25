@@ -50,10 +50,12 @@ There are four points we need to take care of:
 There are three ways I see to do this:
 
 1. Only do causal prediction with the shallow model used to train the embedding & unembedding weights. Do BERT/UL2-style denoising with all other models, then stack the shallow model on top of the rest to make the prediction causal.
-2. Looping latents
+2. Looping latents / recycling hidden states
 3. Post-training (though I will get to that in its own section)
 
 Post-training obviously works together with both of the other options. I'm less sure whether the other two are compatible, but that doesn't matter.
+
+And again, I suspect that this isn't even a big problem. I just want to preempt any potential problems with possible solutions.
 
 ### Denoising for hidden-state alignment
 
@@ -72,19 +74,13 @@ The idea is very simple: Train bidirectional models on BERT/UL2-style denoising 
 **Disadvantages:** I see two disadvantages to this approach:
 
 1. During inference, we cannot use a kv-cache in bidirectional models. This means that while we can in principle use the model stack as a causal model, we have to compute the entire attention matrix at every step, which is really expensive.
-2. *If* we need to post-train the model stack in order to align the individual models' hidden states, then we need to use a causal mask in every model, or we will be unable to train all token positions in parallel. Changing a bidirectional model to a causal model is not trivial, and after this post-training we might have to use a causal mask in all models during inference as well, which gets rid of all the advantages discussed above. 
+2. *If* we need to post-train the model stack in order to align the individual models' hidden states, then we need to use a causal mask in every model, or we will be unable to train all token positions in parallel. Changing a bidirectional model to a causal model is not trivial, and after this post-training we might have to use a causal mask in all models during inference as well, which gets rid of all the advantages discussed above.
 
 These disadvantages are significant. It seems likly that simply using causal models only is the better choice.
 
 In the next sections, I will discuss techniques that work for a model stack of either causal or bidirectional models.
 
-### Loop hidden states (and split the head)
-
-I will present the following techniques with causal models, because they seem more useful for those, and I need to pick one type of model to illustrate them. Again, I see no reason why they wouldn't work for bidirectional models as well.
-
-This is optional, and if it doesn't work it would not invalidate the first part of the article.
-
-#### Loop hidden states
+### Loop hidden states
 
 In [COCONUT]((https://arxiv.org/abs/2412.06769)), the authors post-train a model to recycle its output hidden states at the input to replace Chain of Thought (CoT) traces with latent reasoning. The fact that this works well makes me think two things:
 
@@ -118,38 +114,7 @@ The process:
 
 For more details, see the linked article.
 
-> Again, this shows using a split head (the extra transformer block), but that is not required for latent-looping to work.
-
 Caveat: this is now speculation built on top of speculation. I think it's a cool idea and that it will likely work with a bit of tuning, but there is currently no strong evidence for it.
-
-#### Split head
-
-What do I mean by splitting the head?
-
-I have a contention that we shouldn't see the language head as consisting only of a single FC layer, but at least one prior transformer block, too. In normal transformers, modalities are in conflict with each other, at least if they are trained in an early-fusion manner. I suspect that this is partially because we decode the same hidden state into two different modalities, with only a single FC layer in between. Adding one or two transformer blocks between the shared hidden state and the FC layer might solve this issue. I will write a longer article about this, but it's already relevant here.
-
-In the specific case of stacking models, splitting the head would mean that more abstract representations of the input are fed into the second model, which I think would be closer to a model that is trained with all the models' layers from the start. This might be helped by also cutting off the first layer of model 2 when stacking, because the first transformer block only ever deals with the embeddings of one-hot-encoded tokens, not with abstract representations. I will draw it in like that in the illustration, but whether or not that second part is a good idea must be evaluated empirically.
-
-![Model stacking with split head](images/split-heads.png)
-
-**Advantages** of this approach:
-
-- Preserve the rich internal representations of the models throughout the model stack, instead of collapsing into a representation that is easy to decode after every model.
-- We can now more easily use dynamic compute: simply decode at every model in the stack, and only pass the hidden states on if the prediction distribution has high entropy; a.k.a. when the model is uncertain about the next token, we let the next model refine the hidden states and decode again. Yes, this would likely be possible without splitting the head, but I strongly suspect that it will work significantly better with it, and be much less in conflict with the continuous computation of the full model stack.
-- This might be better for multi-modality, though I'm really not sure about that (and it's a point that is independent of the model-stacking approach).
-- Compatability with [DeepSeek V3](https://github.com/deepseek-ai/DeepSeek-V3)-style Multi-Token Prediction (this is just a nice little bonus), and other techniques (again, possible before, but likely better with this change).
-
-One **disadvantage** of this approach is that it worsens our second concern: that the representations in the hidden states don't align. Without this change, the outputs of model 1 are decoded by the same weights that encode the inputs to model 2, so a certain level of alignment can be expected. However, with this change, that is no longer true. This almost certainly necessitates post-training, as addressed below.
-
-> One thing that might actually help here is to do multi-model training; then, the model will already be trained to include abstract information into its last hidden state, which can be decoded by two different small models: the language decoder and the image decoder. This is truly pure speculation, though.
-
-Still, I believe that&mdash;should we get post-training as described further below to work well&mdash;the advantages of this approach might outweigh the disadvantages. As everything in this article, though, this is a question of empirical testing.
-
-Either way, as most of this article, this is optional, and looping the hidden states, as described below, can be done independently of splitting the head if that doesn't work.
-
-For the sake of completeness, here is an illustration of hidden-state-recycling with the split head:
-
-![Hidden-state recycling with split head](images/coconut-parallel-updated-split-head.png)
 
 ## Aligning the representations between models
 
