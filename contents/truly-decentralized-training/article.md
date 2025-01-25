@@ -82,7 +82,13 @@ In the next sections, I will discuss techniques that work for a model stack of e
 
 ### Loop hidden states
 
-In [COCONUT]((https://arxiv.org/abs/2412.06769)), the authors post-train a model to recycle its output hidden states at the input to replace Chain of Thought (CoT) traces with latent reasoning. The fact that this works well makes me think two things:
+In [COCONUT]((https://arxiv.org/abs/2412.06769)), the authors post-train a model to recycle its output hidden states at the input to replace Chain of Thought (CoT) traces with latent reasoning, like so (image from linked paper):
+
+![COCONUT post-training](images/coconut.png)
+
+They first produce CoT traces, then slowly replace the CoT tokens with the model's own outputs from the previous step. They start with the first CoT token, and increase the number of replaced CoT tokens over training. They report performance improvements over pure CoT with this technique.
+
+The fact that this works well makes me think two things:
 
 1. That the problem of aligning token positions isn't really a big problem
 2. That if it is, we can simply use COCONUT-style post-training to align the hidden states
