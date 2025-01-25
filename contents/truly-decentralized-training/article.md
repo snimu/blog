@@ -177,24 +177,30 @@ Just for illustration, one possible way to handle this is to have the early mode
 
 The only constraint here is that it's unclear to me if this interaction actually works. If model 1 is trained on a piece of information but model 2 isn't, then can model 2 make use of the hidden states from model 1? In other words, would training on disjunct data worsen the problem of incompatible hidden state representations? This would need to be tested empirically.
 
-## Putting it all together
+## Summary
 
-Gaze upon this monstrosity of an illustration:
+I have presented a method for asynchronous training of multiple LLMs, but using them together in a model stack at inference time.
 
-...
+To do so, they are all trained in the same embedding space, which is achieved tied embedding & unembedding weights in a first training run.
 
-The process: ... need to stress again that I'm talking about two models for illustrative purposes only; we can extend this to many more.
+I have identified two possible problems with this setup:
 
-What does this give us? ... (split between causal models and bidirectional models)
+1. The problem of aligning token positions between models
+2. The problem of aligning the representations between models
 
--> to combine the advantages of both, we could interleave causally and non-causally trained models!
+The former is unlikely to be an actual problem, because looping latents is shown to work well&mdash;which is a similar idea to what I'm proposing here. The latter may or may not be a problem. A reason to believe it isn't is that all models work in the same embedding space where they are connected, but it's still possible that there are still points of friction here.
 
-- use each model on its own, with its own strengths and weaknesses
+In any case, I have proposed multiple solutions to both of these problems:
 
-## Summarizing what needs verification
+- Aligning token positions between models
+  - Bidirectional models (though there are problems with this)
+  - Loop latents (COCONUT-style post-training, or even adapted COCONUT in pre-training)
+  - Post-training
+- Aligning the representations between models
+  - Normal post-training
+  - Post-training in an asynchronous manner
 
-- Does splitting the head improve performance in multi-modal settings?
-- Does looping hidden states during pre-training, followed by COCONUT-style post-training, improve latent thinking as opposed to COCONUT-style post-training only? Does splitting the head here improve this?
+I think that this is a promising research direction and would love to work on it in the near future.
 
 ## Citation
 
