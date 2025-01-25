@@ -113,7 +113,9 @@ Here is an illustration of this approach (slightly updated from the linked artic
 The process:
 
 1. Do a normal forward pass and calculate the gradient
-2. Do a second forward pass on the same data, but replace some of the inputs with the output hidden states from the first forward pass; do this at the positions where the model's predictions were high-entropy
+2. Do a second forward pass on the same data, but replace some of the inputs with the output hidden states from the first forward pass
+    - Do this at the positions where the model's predictions were high-entropy
+    - Detach the outputs of the first forward pass from the computation graph first; don't propagate the gradients through both forward passes. Instead, treat the outputs from the first forward pass as independent inputs in the second forward pass; what matters is that the model learns to work with its own outputs as inputs.
     - To save computation, only do this every $n^{th}$ forward pass; for example, every $100$ forward passes
     - Only calculate the loss at the positions where the inputs were replaced with hidden states
 3. Accumulate the gradients from both forward passes and update the model parameters
