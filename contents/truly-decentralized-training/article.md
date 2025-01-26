@@ -42,20 +42,20 @@ There are four points we need to take care of:
 
 1. The model used to train the embedding & unembedding weights must have the same embedding dimension as the models we will stack later. I won't write any more about this, because it's just obvious how to do it.
 2. It must be trained on enough data to make the embedding & unembedding weights as high-quality as possible. Again, obvious.
-3. The outputs of model 1 will be tailored to including as much information as possible about the *next* token, but model 2 ideally needs an abstract representation of the *current* token at its input, because that's how it's trained. We therefore need to align the output-hidden-states of model 1 with the input-hidden-states of model 2. I actually think that this won't be a big problem, but in case it is, I will discuss ways to deal with it.
+3. The outputs of model 1 will be tailored to including as much information as possible about the *next* token, but model 2 ideally needs an abstract representation of the *current* token at its input, because that's how it's trained. We therefore need to align the output-hidden-states of model 1 with the input-hidden-states of model 2.
 4. The fact that two models are trained in the same embedding space doesn't guarantee that they work with the same abstractions. There *might* be issues with this, and we have to plan for dealing with them.
 
 ## Aligning token positions between models
 
+The [logit lens](https://www.lesswrong.com/posts/AcKRB8wDpdaN6v6ru/interpreting-gpt-the-logit-lens) shows that inputs get changed into predictions for the next token immediately in a transformer. This means that the output hidden state of a causal model will contain not enriched representations of the inputs, from which the language head produces next-token predictions, but rather the next-token predictions themselves, to be decoded into a probability distribution over the vocabulary by the language head. What happens if we use a next-token prediction as the input to a model that is also trained to produce a next-token prediction? Will it produce a next-next-token prediction? Completely fail? I'm not fully certain that this will be an acutal problem, but we need to think of ways to mitigate it if it is.
+
 There are three ways I see to do this:
 
 1. Only do causal prediction with the shallow model used to train the embedding & unembedding weights. Do BERT/UL2-style denoising with all other models, then stack the shallow model on top of the rest to make the prediction causal.
-2. Looping latents / recycling hidden states
+2. Looping latents COCONUT-style
 3. Post-training (though I will get to that in its own section)
 
-Post-training obviously works together with both of the other options. I'm less sure whether the other two are compatible, but that doesn't matter.
-
-And again, I suspect that this isn't even a big problem. I just want to preempt any potential problems with possible solutions.
+Post-training obviously works together with both of the other options; I'm less sure whether the other two are compatible.
 
 ### Denoising for hidden-state alignment
 
@@ -88,12 +88,7 @@ In [COCONUT]((https://arxiv.org/abs/2412.06769)), the authors post-train a model
 
 They first produce CoT traces, then slowly replace the CoT tokens with the model's own outputs from the previous step. They start with the first CoT token, and increase the number of replaced CoT tokens over training. They report performance improvements over pure CoT with this technique.
 
-The fact that this works well makes me think two things:
-
-1. That the problem of aligning token positions isn't really a big problem
-2. That if it is, we can simply use COCONUT-style post-training to align the hidden states
-
-And I think we should be doing COCONUT-style post-training either way, because it would give us the following benefits:
+The fact that this works well makes me think that we can simply use COCONUT-style post-training to align the hidden states. And not only that, COCONUT-style post-training would give us the following benefits:
 
 - Models that are used to working with hidden states. This is especially useful for model 2, which will take hidden states from model 1 as inputs.
 - The ability to work in a continuous latent space.
@@ -119,6 +114,11 @@ The process:
     - To save computation, only do this every $n^{th}$ forward pass; for example, every $100$ forward passes
     - Only calculate the loss at the positions where the inputs were replaced with hidden states
 3. Accumulate the gradients from both forward passes and update the model parameters
+
+This gives us two additional advantages over COCONUT post-training:
+
+1. In the COCONUT paper, the authors use latent looping to replace CoT tokens with the model's own outputs from the previous step. This means that they explicitly train the next-next-token prediction I've talked about above. While this works with the special tokens that they use, I'm not certain how well it would work with making the next-token prediction with latent looping that does not resemble CoT: like, for example, model stacking. The method presented above would train models on exactly that (though it is unproven, to be clear).
+2. Just way more COCONUT-style training data, because we do it in pre-training already.
 
 For more details, see the linked article.
 
@@ -178,6 +178,131 @@ I think it might make sense to train the different models on at least partially 
 Just for illustration, one possible way to handle this is to have the early models be focussed on knowledge retrieval, and later models on reasoning. This would nicely fit the theme of early stopping if the answer is easy to find, and reasoning for longer if it isn't; in which case, the later models, trained on reasoning, might benefit from the knowledge imparted by the early models.
 
 The only constraint here is that it's unclear to me if this interaction actually works. If model 1 is trained on a piece of information but model 2 isn't, then can model 2 make use of the hidden states from model 1? In other words, would training on disjunct data worsen the problem of incompatible hidden state representations? This would need to be tested empirically.
+
+## Research plan
+
+Here is a rough research plan suggested by DeepSeek's R1. It's good enough that I want to include it here, partially to show that the issues addressed in this article can be broken down into smaller steps, and verified independently. They don't all rely on each other, and are thus to be seen as independent research projects that have the potential to be combined in the future.
+
+Here is the plan:
+
+### Phase 1: Validate Core Assumptions
+
+**Objective:** Confirm that models trained in a shared embedding space can be stacked without catastrophic failure.
+
+**Experiments:**
+
+Tied Embedding Baseline
+
+- Train a small model (e.g., TinyLlama-1.1B) with tied embeddings.
+- Freeze embeddings and train a second model of identical size on the same data.
+- Stack the two models and measure validation loss on held-out data vs. a single model of equivalent depth.
+- Hypothesis: Stacked models will underperform a monolithic model but show non-random behavior.
+
+Token Position Alignment Test
+
+- Train two causal models independently (same embedding space).
+- Stack them and evaluate next-token prediction loss.
+- Compare to a control where Model 2 is trained on Model 1’s hidden states (centralized training).
+- Metric: Perplexity gap between decentralized vs. centralized stacking.
+
+### Phase 2: Test Token Alignment Strategies
+
+**Objective:** Evaluate methods to align model outputs/inputs (token positions).
+
+**Experiments:**
+
+Bidirectional vs. Causal Models
+
+- Train Model 1 as causal, Model 2 as bidirectional (BERT-style).
+- Stack them and measure loss with/without causal masking during inference.
+- Compare attention computation costs (FLOPs, latency).
+
+COCONUT-Style Latent Looping
+
+- Implement COCONUT pre-training for a small model.
+- Train with latent recycling (replace 10–50% of inputs with detached hidden states).
+- Stack two COCONUT-trained models and compare to non-COCONUT baselines.
+- Metric: Ability to predict tokens after multiple latent loops.
+
+Inference-Time Latent Recycling
+
+- Allow models to iteratively refine hidden states (e.g., 1–3 loops per token).
+- Measure perplexity vs. computation tradeoff.
+
+### Phase 3: Representation Alignment Tests
+
+**Objective:** Ensure hidden states are semantically compatible across models.
+
+**Experiments:**
+
+Post-Training the Full Stack
+
+- Train two models independently, then fine-tune the stack end-to-end.
+- Compare fine-tuning speed/performance to monolithic training.
+- Hypothesis: Post-training closes the performance gap with centralized training.
+
+Asynchronous "Special Sauce" Alignment
+
+- Train Model 2 on original data, then generate corrected hidden states via gradient inversion.
+- Train Model 1 on these corrected states (with token loss as regularization).
+- Compare to a control where Model 1 is trained only on tokens.
+- Metric: Downstream task performance (e.g., reasoning benchmarks).
+
+Probing Hidden States
+
+- Use linear probes to measure whether hidden states from different models encode similar features (e.g., syntax, semantics).
+
+### Phase 4: Scaling and Optimization
+
+**Objective:** Test practical scalability and efficiency.
+
+**Experiments:**
+
+Heterogeneous Model Sizes
+
+- Stack models of varying sizes/depths (e.g., 1B + 3B).
+- Measure performance vs. compute efficiency.
+
+Data Partitioning
+
+- Train models on disjoint datasets (e.g., Model 1 on knowledge-heavy data, Model 2 on reasoning tasks).
+- Evaluate whether stacking improves performance on hybrid tasks.
+
+Dynamic Computation
+
+- Implement early-exit based on prediction confidence from earlier models.
+- Measure inference speedup vs. accuracy tradeoff.
+
+### Phase 5: Real-World Validation
+
+**Objective:** Benchmark against traditional training.
+
+**Experiments:**
+
+Performance Comparison
+
+- Train a decentralized stack (e.g., 4x 1B models) vs. a monolithic 4B model.
+- Compare validation loss, training time, and hardware utilization.
+
+Task-Specific Evaluation
+
+- Test on downstream tasks (e.g., MATH, GSM8K, MMLU) to measure reasoning/knowledge integration.
+
+Cost Analysis
+
+- Estimate $/FLOP for decentralized vs. centralized training, including communication overhead.
+
+### Critical Risks & Mitigation
+
+- **Risk:** Hidden states are incompatible despite shared embeddings.
+
+  **Mitigation:** Use Phase 3 probing to detect mismatches early; fall back to post-training.
+- **Risk:** Bidirectional models ruin inference efficiency.
+
+  **Mitigation:** Prioritize causal models with COCONUT pre-training.
+- **Risk:** Asynchronous alignment fails.
+
+  **Mitigation:** Combine "special sauce" with light end-to-end fine-tuning.
 
 ## Summary
 
