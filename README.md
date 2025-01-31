@@ -4,6 +4,9 @@ Markdown files serving as my blog.
 
 Table of Contents (dates as yyyy-mm-dd):
 
+- [Mixture of Tokenizers &mdash; Math ablations](contents/mixture-of-tokenizers-math/article.md)
+  - 2025-01-28
+
 - [COCONUT: Parallel pre-training](contents/COCONUT-parallel-pretraining/article.md)
   - 2025-01-12
   - updated 2025-01-15
