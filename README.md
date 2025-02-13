@@ -4,6 +4,9 @@ Markdown files serving as my blog.
 
 Table of Contents (dates as yyyy-mm-dd):
 
+- [Benefits of looping latents](contents/benefits-of-looping-latents/article.md)
+  - 2025-02-13
+
 - [Mixture of Tokenizers &mdash; Math ablations](contents/mixture-of-tokenizers-math/article.md)
   - 2025-01-28
 
