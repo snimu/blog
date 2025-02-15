@@ -4,6 +4,9 @@ Markdown files serving as my blog.
 
 Table of Contents (dates as yyyy-mm-dd):
 
+- [The Tick-Tock-Boom Cycle: A Strategic Pattern for LLM Development](contents/tick-tock-boom/article.md)
+  - 2025-02-15
+
 - [Benefits of looping latents](contents/benefits-of-looping-latents/article.md)
   - 2025-02-13
 
