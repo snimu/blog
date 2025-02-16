@@ -406,3 +406,14 @@ What would be the benefits?
     - Predict current masked token &rarr; BERT with causal mask
     - Predict next token from masked tokens &rarr; multi-token-prediction
     - Would potentially fix the difficulties in learning facts, because it receives so much more feedback from the multiple prediction heads
+
+## Small experiments
+
+| # Parameters | val-loss CLM | val-loss MCLM | val-loss-MCLM/val-loss-CLM [%] |
+|-------------|--------------|------------------|----------------------------------------|
+| 13.2M       | 4.297        | 4.311            | 100.3%                                |
+| 46M         | 3.319        | 3.385            | 102.0%                                |
+| 240.7M      | 3.077        | 3.013            | 97.9%                                 |
+| 773.2M      | 3.047        | 2.966            | 97.3%                                 |
+| 1.3B        | 3.045        | 2.941            | 96.6%                                 |
+
