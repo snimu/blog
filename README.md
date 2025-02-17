@@ -4,6 +4,9 @@ Markdown files serving as my blog.
 
 Table of Contents (dates as yyyy-mm-dd):
 
+- [Forward-Backward Prediction](contents/fw-bw-prediction/article.md)
+  - 2025-02-17
+
 - [The Tick-Tock-Boom Cycle: A Strategic Pattern for LLM Development](contents/tick-tock-boom/article.md)
   - 2025-02-15
 
