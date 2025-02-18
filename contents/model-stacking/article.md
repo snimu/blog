@@ -1,6 +1,8 @@
-# Truly decentralized training
+# Model stacking
 
 I have a crazy idea for doing large decentralized, asynchronous training of transformers. This article is *very* speculative.
+
+In the end, I have a section presenting any experiments I have done; this will be continuously updated (though probably sparsely).
 
 ## Introduction
 
@@ -42,22 +44,27 @@ There are four points we need to take care of:
 
 1. The model used to train the embedding & unembedding weights must have the same embedding dimension as the models we will stack later. I won't write any more about this, because it's just obvious how to do it.
 2. It must be trained on enough data to make the embedding & unembedding weights as high-quality as possible. Again, obvious.
-3. The outputs of model 1 will be tailored to including as much information as possible about the *next* token, but model 2 ideally needs an abstract representation of the *current* token at its input, because that's how it's trained. We therefore need to align the output-hidden-states of model 1 with the input-hidden-states of model 2.
+3. The outputs of model 1 will be tailored to include as much information as possible about the *next* token, but model 2 ideally needs an abstract representation of the *current* token at its input, because that's how it's trained. We therefore need to align the output-hidden-states of model 1 with the input-hidden-states of model 2.
 4. The fact that two models are trained in the same embedding space doesn't guarantee that they work with the same abstractions. There *might* be issues with this, and we have to plan for dealing with them.
 
 ## Aligning token positions between models
 
 The [logit lens](https://www.lesswrong.com/posts/AcKRB8wDpdaN6v6ru/interpreting-gpt-the-logit-lens) shows that inputs get changed into predictions for the next token immediately in a transformer. This means that the output hidden state of a causal model will contain not enriched representations of the inputs, from which the language head produces next-token predictions, but rather the next-token predictions themselves, to be decoded into a probability distribution over the vocabulary by the language head. What happens if we use a next-token prediction as the input to a model that is also trained to produce a next-token prediction? Will it produce a next-next-token prediction? Completely fail? I'm not fully certain that this will be an acutal problem, but we need to think of ways to mitigate it if it is.
 
-There are three ways I see to do this:
+There are four ways I see to do this:
 
-1. Only do causal prediction with the shallow model used to train the embedding & unembedding weights. Do BERT/UL2-style denoising with all other models, then stack the shallow model on top of the rest to make the prediction causal.
-2. Looping latents COCONUT-style
-3. Post-training (though I will get to that in its own section)
+1. Cut off the first layer from all models in the stack but the first.
+2. Only do causal prediction with the shallow model used to train the embedding & unembedding weights. Do BERT/UL2-style denoising with all other models, then stack the shallow model on top of the rest to make the prediction causal. This is infeasible for inference, because no kv-cache can be used, but maybe it's interesting nevertheless.
+3. Looping latents COCONUT-style
+4. Post-training (though I will get to that in its own section)
 
-Post-training obviously works together with both of the other options; I'm less sure whether the other two are compatible.
+### Cutting off the first layer
+
+This follows the logit lens: if the model turns embeddings into next-token predictions at the first layer, then all subsequent layers will be able to work with "next-token latents"; so cutting off the first layer from model 2 should help align the token positions, if both the hypothesis of token alignment being a problem and the hypothesis that the first layer transforms embeddings into next-token predictions are true.
 
 ### Denoising for hidden-state alignment
+
+[[skip to the next section if you don't want to read this]](#loop-hidden-states)
 
 The idea is very simple: Train bidirectional models on BERT/UL2-style denoising objectives asynchronously, and stack them. Then, stack the shallow, causal model that was used to train the embedding & unembedding weights on top of the rest:
 
@@ -73,8 +80,8 @@ The idea is very simple: Train bidirectional models on BERT/UL2-style denoising 
 
 **Disadvantages:** I see two disadvantages to this approach:
 
-1. During inference, we cannot use a kv-cache in bidirectional models. This means that while we can in principle use the model stack as a causal model, we have to compute the entire attention matrix at every step, which is really expensive.
-2. *If* we need to post-train the model stack in order to align the individual models' hidden states, then we need to use a causal mask in every model, or we will be unable to train all token positions in parallel. Changing a bidirectional model to a causal model is not trivial, and after this post-training we might have to use a causal mask in all models during inference as well, which gets rid of all the advantages discussed above.
+1. During inference, we cannot use a kv-cache in bidirectional models. This means that while we can in principle use the model stack as a causal model, we have to compute the entire attention matrix at every step, which is really expensive. This basically kills the idea.
+2. *If* we need to post-train the model stack in order to align the individual models' hidden states, then we need to use a causal mask in every model, or we will be unable to train all token positions in parallel, unless we don't train the causal model together with the others. Changing a bidirectional model to a causal model is not trivial, and after this post-training we might have to use a causal mask in all models during inference as well, which gets rid of all the advantages discussed above.
 
 These disadvantages are significant. It seems likly that simply using causal models only is the better choice.
 
@@ -102,8 +109,6 @@ Optionally, we might be able to go further with this. [I have written about trai
 Here is an illustration of this approach (slightly updated from the linked article):
 
 ![COCONUT parallel](images/coconut-parallel-updated.png)
-
-> I call the hidden states "latents" because "hidden state" doesn't fit into the little blocks; just replace "latent" with "hidden state" in your mind.
 
 The process:
 
@@ -150,7 +155,7 @@ Here is an idea for doing post-training for aligning the models in an asynchrono
 
 1. Do forward pass through model 1 and collect dataset of hidden states
 2. Do forward pass through second model, with hidden states of model 1 as inputs
-3. Calculate loss agaist token targets
+3. Calculate loss against token targets
 4. Calculate the gradient with respect to the input-hidden-states at which the first model's output-hidden-states will be entered
 5. Update the input-hidden-states with the gradients to get inputs that would have produced the correct targets with high confidence in model 2
 6. Create a dataset of such samples&mdash;token inputs, corrected hidden-state-inputs, token targets&mdash; and train model 1 on this
@@ -164,145 +169,20 @@ This way, you can collect a large dataset using model 2, and then, without needi
 
 I see two main ways to initialize the models:
 
-1. We can train a single model to train the embedding weights, and then initialize the other models with the transformer backend. This is good for avoiding wasted computation
+1. We can train a single model to train the embedding weights, and then copy it and continually train all the models (minus the embedding weights) on differently shuffeled data. This is good for avoiding wasted computation
 2. Alternatively, we could throw away that original model, or use it as just one of the backends which are all trained with their own random seed. Then, we'd have more diversity between layers, and a higher chance of a lottery ticket being among the different asynchronously trained models (we could actually train several times as many models as we will ultimately use, and only use the best ones in the end, or run some optimization to find the exact model stack that displays the highest compatibility between the models)
 
 For both of these, we need a way to introduce diversity between the models. This is of course easier for the second approach than the first (because we initialize the models differently), but in both cases, we can do better if we at least shuffle the data that the models see.
 
 ## Data
 
-But we can go further than shuffling the data.
+We should of course shuffle the data, bu we can go further than that.
 
 I think it might make sense to train the different models on at least partially disjunct data (a large overlap is probably desireable). This allows us to effectively use a much larger dataset without having to necessarily train all models on it.
 
 Just for illustration, one possible way to handle this is to have the early models be focussed on knowledge retrieval, and later models on reasoning. This would nicely fit the theme of early stopping if the answer is easy to find, and reasoning for longer if it isn't; in which case, the later models, trained on reasoning, might benefit from the knowledge imparted by the early models.
 
 The only constraint here is that it's unclear to me if this interaction actually works. If model 1 is trained on a piece of information but model 2 isn't, then can model 2 make use of the hidden states from model 1? In other words, would training on disjunct data worsen the problem of incompatible hidden state representations? This would need to be tested empirically.
-
-## Research plan
-
-Here is a rough research plan suggested by DeepSeek's R1. It's good enough that I want to include it here, partially to show that the issues addressed in this article can be broken down into smaller steps, and verified independently. They don't all rely on each other, and are thus to be seen as independent research projects that have the potential to be combined in the future.
-
-Here is the plan:
-
-### Phase 1: Validate Core Assumptions
-
-**Objective:** Confirm that models trained in a shared embedding space can be stacked without catastrophic failure.
-
-**Experiments:**
-
-Tied Embedding Baseline
-
-- Train a small model (e.g., TinyLlama-1.1B) with tied embeddings.
-- Freeze embeddings and train a second model of identical size on the same data.
-- Stack the two models and measure validation loss on held-out data vs. a single model of equivalent depth.
-- Hypothesis: Stacked models will underperform a monolithic model but show non-random behavior.
-
-Token Position Alignment Test
-
-- Train two causal models independently (same embedding space).
-- Stack them and evaluate next-token prediction loss.
-- Compare to a control where Model 2 is trained on Model 1’s hidden states (centralized training).
-- Metric: Perplexity gap between decentralized vs. centralized stacking.
-
-### Phase 2: Test Token Alignment Strategies
-
-**Objective:** Evaluate methods to align model outputs/inputs (token positions).
-
-**Experiments:**
-
-Bidirectional vs. Causal Models
-
-- Train Model 1 as causal, Model 2 as bidirectional (BERT-style).
-- Stack them and measure loss with/without causal masking during inference.
-- Compare attention computation costs (FLOPs, latency).
-
-COCONUT-Style Latent Looping
-
-- Implement COCONUT pre-training for a small model.
-- Train with latent recycling (replace 10–50% of inputs with detached hidden states).
-- Stack two COCONUT-trained models and compare to non-COCONUT baselines.
-- Metric: Ability to predict tokens after multiple latent loops.
-
-Inference-Time Latent Recycling
-
-- Allow models to iteratively refine hidden states (e.g., 1–3 loops per token).
-- Measure perplexity vs. computation tradeoff.
-
-### Phase 3: Representation Alignment Tests
-
-**Objective:** Ensure hidden states are semantically compatible across models.
-
-**Experiments:**
-
-Post-Training the Full Stack
-
-- Train two models independently, then fine-tune the stack end-to-end.
-- Compare fine-tuning speed/performance to monolithic training.
-- Hypothesis: Post-training closes the performance gap with centralized training.
-
-Asynchronous "Special Sauce" Alignment
-
-- Train Model 2 on original data, then generate corrected hidden states via gradient inversion.
-- Train Model 1 on these corrected states (with token loss as regularization).
-- Compare to a control where Model 1 is trained only on tokens.
-- Metric: Downstream task performance (e.g., reasoning benchmarks).
-
-Probing Hidden States
-
-- Use linear probes to measure whether hidden states from different models encode similar features (e.g., syntax, semantics).
-
-### Phase 4: Scaling and Optimization
-
-**Objective:** Test practical scalability and efficiency.
-
-**Experiments:**
-
-Heterogeneous Model Sizes
-
-- Stack models of varying sizes/depths (e.g., 1B + 3B).
-- Measure performance vs. compute efficiency.
-
-Data Partitioning
-
-- Train models on disjoint datasets (e.g., Model 1 on knowledge-heavy data, Model 2 on reasoning tasks).
-- Evaluate whether stacking improves performance on hybrid tasks.
-
-Dynamic Computation
-
-- Implement early-exit based on prediction confidence from earlier models.
-- Measure inference speedup vs. accuracy tradeoff.
-
-### Phase 5: Real-World Validation
-
-**Objective:** Benchmark against traditional training.
-
-**Experiments:**
-
-Performance Comparison
-
-- Train a decentralized stack (e.g., 4x 1B models) vs. a monolithic 4B model.
-- Compare validation loss, training time, and hardware utilization.
-
-Task-Specific Evaluation
-
-- Test on downstream tasks (e.g., MATH, GSM8K, MMLU) to measure reasoning/knowledge integration.
-
-Cost Analysis
-
-- Estimate $/FLOP for decentralized vs. centralized training, including communication overhead.
-
-### Critical Risks & Mitigation
-
-- **Risk:** Hidden states are incompatible despite shared embeddings.
-
-  **Mitigation:** Use Phase 3 probing to detect mismatches early; fall back to post-training.
-- **Risk:** Bidirectional models ruin inference efficiency.
-
-  **Mitigation:** Prioritize causal models with COCONUT pre-training.
-- **Risk:** Asynchronous alignment fails.
-
-  **Mitigation:** Combine "special sauce" with light end-to-end fine-tuning.
 
 ## Summary
 
@@ -329,14 +209,74 @@ In any case, I have proposed multiple solutions to both of these problems:
 
 I think that this is a promising research direction and would love to work on it in the near future.
 
+## Experiments
+
+Here, I will lay out the expriments that I have performed, and their results. To be updated continuously as long as I keep working on this.
+
+### 2025-02-18
+
+Code: [https://github.com/snimu/model-stack](https://github.com/snimu/model-stack)
+
+I based my code on [this old modded-nanogpt speedrun](https://github.com/KellerJordan/modded-nanogpt/blob/master/records/101024_Muon/train_gpt2.py), because 1) it uses tied embedding and unembedding weights, and 2) it's still a fairly simple model, which is probably good for stacking the models.
+
+I trained the first model on 3.1M tokens of fineweb, took its embedding weights, froze them, and trained a second model with them on the same data. Then, I stacked them. I either removed the last transformer block from the first model when stacked (`layer_removed`) or not (`layer_kept`).
+
+As a first baseline, I also trained two models with different embedding weights and stacked them, to see what would happen.
+
+Here are the final validation losses for the individual models, and their stack:
+
+| Layer removed | Shared embeddings | Model 1 val loss | Model 2 val loss | Stack val loss |
+| ------------- | ----------------- | ---------------- | ---------------- | -------------- |
+| No            | No                | 3.28             | 3.28             | 7.26           |
+| No            | Yes               | 3.28             | 3.31             | 6.30           |
+| Yes           | No                | 3.28             | 3.28             | 6.66           |
+| Yes           | Yes               | 3.28             | 3.31             | 5.90           |
+
+The three takeaways are:
+
+1. So far, this approach has failed
+   - The model stack is not better than the individual models
+2. Sharing the embedding weights helps noticably with stackings
+   - This is promising; I might be on a good track, and things like training for more tokens might solve the issue
+   - However, the chances of success are still very small
+3. Removing the first layer of model 2 helps in both cases
+   - Hypothesis 1: The [logit lens](https://www.lesswrong.com/posts/AcKRB8wDpdaN6v6ru/interpreting-gpt-the-logit-lens) is right that the first layer is what turns the input embeddings into next-token predictions; all other layers are only there to refine the predictions. If this is true, the problem of aligning the predicted-token-positions between models is solved
+   - Hypothesis 2: Removing a layer from model 2 removes one transformation of the output of  model 1. With every layer that is removed, the performance increases.
+
+As a second baseline, I only trained a single model and stacked it with itself (of course, it inehrently can only use shared embeddings). Here are the results:
+
+| Layer removed | Model 1 val loss | Stack val loss |
+| ------------- | ---------------- | -------------- |
+| No            | 3.28             | 7.28           |
+| Yes           | 3.28             | 6.28           |
+
+This is best compared to the models with shared embeddings. In this case, stacking the same model twice leads to significantly worse results than stacking two different models. This is a hint that removing the first layer of model 2 helps because it's what turns the input embeddings into next-token predictions; otherwise, why would model 2 hurt performance less than model 1, when applied to the outputs of model 1?
+
+Next steps:
+
+- Shuffle data
+  - By default, the models train on the same data *in the same order*, and only their initialization is different.
+  - Changing this could make a difference, but I don't think it will
+- Train for longer
+  - I don't know if the embedding weights from model 1 are even trained sufficiently after 8M tokens
+  - Training for longer &mdash; for example, for 1B, or 10B tokens &mdash; might help
+- Larger models
+  - It's possible that the model size is a limiting factor for the ability to make use of latents
+  - If so, scaling will help
+ Remove last layer of model 1
+  - Removing the first layer of model 2 helps
+  - Just to see what happens, would removing the last layer of model 1 help, too?
+ Remove more layers of model 2
+  - Distinguish between the two hypotheses above
+
 ## Citation
 
 ```bibtex
-@misc{snimu2024decentralized,
-    title={Truly decentralized training},
+@misc{snimu2024modelstacking,
+    title={Model stacking},
     author={Sebastian M\"uller},
     year={2025},
-    month={jan},
-    url={https://github.com/snimu/blog/blob/main/contents/truly-decentralized-training/article.md}
+    month={2},
+    url={https://github.com/snimu/blog/blob/main/contents/model-stacking/article.md}
 }
 ```

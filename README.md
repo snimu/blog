@@ -4,6 +4,9 @@ Markdown files serving as my blog.
 
 Table of Contents (dates as yyyy-mm-dd):
 
+- [Model stacking](contents/model-stacking/article.md)
+  - 2025-02-18
+
 - [Forward-Backward Prediction](contents/fw-bw-prediction/article.md)
   - 2025-02-17
 
