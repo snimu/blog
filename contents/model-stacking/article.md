@@ -219,7 +219,7 @@ Code: [https://github.com/snimu/model-stack](https://github.com/snimu/model-stac
 
 I based my code on [this old modded-nanogpt speedrun](https://github.com/KellerJordan/modded-nanogpt/blob/master/records/101024_Muon/train_gpt2.py), because 1) it uses tied embedding and unembedding weights, and 2) it's still a fairly simple model, which is probably good for stacking the models.
 
-I trained the first model on 3.1M tokens of fineweb, took its embedding weights, froze them, and trained a second model with them on the same data. Then, I stacked them. I either removed the last transformer block from the first model when stacked (`layer_removed`) or not (`layer_kept`).
+I trained the first model on 3.1M tokens of fineweb, took its embedding weights, froze them, and trained a second model with them on the same data. Then, I stacked them. I either removed the last transformer block from the first model when stacked ("Layer removed") or not ("Layer kept").
 
 As a first baseline, I also trained two models with different embedding weights and stacked them, to see what would happen.
 
