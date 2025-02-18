@@ -243,7 +243,7 @@ The three takeaways are:
    - Hypothesis 1: The [logit lens](https://www.lesswrong.com/posts/AcKRB8wDpdaN6v6ru/interpreting-gpt-the-logit-lens) is right that the first layer is what turns the input embeddings into next-token predictions; all other layers are only there to refine the predictions. If this is true, the problem of aligning the predicted-token-positions between models is solved
    - Hypothesis 2: Removing a layer from model 2 removes one transformation of the output of  model 1. With every layer that is removed, the performance increases.
 
-As a second baseline, I only trained a single model and stacked it with itself (of course, it inehrently can only use shared embeddings). Here are the results:
+As a second baseline, I only trained a single model and stacked it with itself (of course, it inherently can only use shared embeddings). Here are the results:
 
 | Layer removed | Model 1 val loss | Stack val loss |
 | ------------- | ---------------- | -------------- |
@@ -263,10 +263,10 @@ Next steps:
 - Larger models
   - It's possible that the model size is a limiting factor for the ability to make use of latents
   - If so, scaling will help
- Remove last layer of model 1
+- Remove last layer of model 1
   - Removing the first layer of model 2 helps
   - Just to see what happens, would removing the last layer of model 1 help, too?
- Remove more layers of model 2
+- Remove more layers of model 2
   - Distinguish between the two hypotheses above
 
 ## Citation
