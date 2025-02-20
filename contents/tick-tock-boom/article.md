@@ -58,7 +58,7 @@ The tick-tock-boom cycle isn't just about making development more orderly—it's
 ## Citation
 
 ```bibtex
-@misc{mueller2023ticktockboom,
+@misc{snimu2025ticktockboom,
     title={The Tick-Tock-Boom Cycle: A Strategic Pattern for LLM Development},
     author={Sebastian Nicolas Müller and Claude 3.5 Sonnet},
     year={2025},
