@@ -6,11 +6,11 @@ Large Language Model development has historically followed a pattern where organ
 
 ## The Three Phases
 
-1. **Tick (Distill):**
+1. **Tick (Distill)**
 During the Tick phase, organizations focus on distilling their previous largest model into a more efficient form. The goal is straightforward: create the most economical version of your powerful model while retaining as much capability as possible.
 
 2. **Tock (Validate):**
-The Tock phase is the critical new component in this cycle. It is about systematic validation of innovations at scale. AI labs are constantly innovating across multiple dimensions - architectures, data strategies, and infrastructure improvements. During Tock, you take these innovations (both from your lab and others) and validate them at a scale approaching your previous largest model. This creates a unique opportunity to verify which innovations truly work at scale, and critically, how they interact with each other.
+The Tock phase represents the key innovation in this development pattern. While AI labs are constantly innovating across multiple dimensions - architectures, data strategies, and infrastructure improvements - there hasn't been a systematic way to validate which innovations will work at larger scales. During Tock, you take these innovations (both from your lab and others) and validate them at a scale approaching your previous largest model. This creates a unique opportunity to verify which innovations truly work at scale, and critically, how they interact with each other.
 
     Innovations to validate span the entire technical stack:
 
@@ -27,13 +27,15 @@ The Boom phase is where everything comes together. Using insights from the Tock 
 
 The tick-tock-boom cycle aligns organizational resources and research in several key ways:
 
-1. **Risk Management**: By validating innovations at large (but not maximum) scale during Tock, organizations can be more adventurous in their flagship models while managing risk. The validation phase provides confidence about which improvements will translate to even larger scales. This is especially crucial when combining multiple innovations across architecture, data, and infrastructure.
+1. **Risk Management:** By validating innovations at large (but not maximum) scale during Tock, organizations can be more adventurous in their flagship models while managing risk. The validation phase provides confidence about which improvements will translate to even larger scales. This is especially crucial when combining multiple innovations across architecture, data, and infrastructure.
 
-2. **Continuous Innovation, Systematic Validation**: The cycle acknowledges that innovation happens continuously in AI labs. Instead of trying to control when innovations happen, it creates a structured process for validating them at scale and incorporating them into major models.
+2. **Real-World Validation:** While traditional evaluations provide limited insight into model capabilities, deploying Tock-phase models through APIs (and optionally open-source releases) provides crucial real-world feedback. This user engagement reveals how different innovations actually perform in production environments and how they impact real use cases. By the time you reach the Boom phase, you have not just internal validation data but concrete user experiences to inform your architectural decisions.
 
-3. **Field-Wide Leverage**: The Tock phase can validate not just internal innovations, but promising ideas from the entire field. This allows organizations to leverage the complete landscape of public research while validating it at scales beyond what most labs can access.
+3. **Continuous Innovation, Systematic Validation:** The cycle acknowledges that innovation happens continuously in AI labs. Instead of trying to control when innovations happen, it creates a structured process for validating them at scale and incorporating them into major models.
 
-4. **Resource Alignment**: Each phase naturally matches available computational resources. Tick uses moderate resources for distillation, Tock uses significant resources for parallel validation, and Boom concentrates resources for maximum scale.
+4. **Field-Wide Leverage:** The Tock phase can validate not just internal innovations, but promising ideas from the entire field. This allows organizations to leverage the complete landscape of public research while validating it at scales beyond what most labs can access.
+
+5. **Resource Alignment:** The natural time delays between phases create perfect alignment with organizational growth. After a Boom, you use your compute resources to create efficient models during Tick while acquiring more GPUs. By the time you reach Tock several months later, you have substantially more resources available to validate multiple innovation combinations at large scale. This validation period provides additional time for infrastructure growth, ensuring you're ready for the next Boom phase.
 
 ## Advancing the Field Through Publication
 
