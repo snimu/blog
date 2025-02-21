@@ -4,6 +4,9 @@ Markdown files serving as my blog.
 
 Table of Contents (dates as yyyy-mm-dd):
 
+- [Sorting shuffled data as a verifiable task](contents/sorting-as-a-universal-task/article.md)
+  - 2025-02-21
+
 - [Model stacking](contents/model-stacking/article.md)
   - 2025-02-18
 
