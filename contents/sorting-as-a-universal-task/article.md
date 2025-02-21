@@ -1,4 +1,4 @@
-# Sorting as a Universal Task
+# Sorting shuffled-data as a verifiable task
 
 Sorting shuffled data is a great verifiable task for RL, and by extension, a good eval benchmark. In this article, I want to boost it so that it will be used more.
 
@@ -52,7 +52,7 @@ I've seen people use this as a benchmark before. I'm not claiming novelty here, 
 
 ```bibtex
 @article{snimu2025sorting,
-  title={Sorting as a Universal Task},
+  title={Sorting shuffled data as a verifiable task},
   author={Sebastian Nicolas Müller},
   year={2025},
   month={Feb},
