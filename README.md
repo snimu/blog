@@ -4,6 +4,9 @@ Markdown files serving as my blog.
 
 Table of Contents (dates as yyyy-mm-dd):
 
+- [Tokens vs. Bytes](contents/tokens-advantages-and-disadvantages/article.md)
+  - 2025-02-21
+
 - [Sorting shuffled data as a verifiable task](contents/sorting-as-a-universal-task/article.md)
   - 2025-02-21
 
