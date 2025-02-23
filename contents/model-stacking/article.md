@@ -219,7 +219,7 @@ Code: [https://github.com/snimu/model-stack](https://github.com/snimu/model-stac
 
 I based my code on [this old modded-nanogpt speedrun](https://github.com/KellerJordan/modded-nanogpt/blob/master/records/101024_Muon/train_gpt2.py), because 1) it uses tied embedding and unembedding weights, and 2) it's still a fairly simple model, which is probably good for stacking the models.
 
-I trained the first model on 3.1M tokens of fineweb, took its embedding weights, froze them, and trained a second model with them on the same data. Then, I stacked them. I either removed the last transformer block from the first model when stacked ("Layer removed") or not ("Layer kept").
+I trained the first model on 3.1M tokens [CORRECTION: 3.25 *billion* tokens, I don't know what I thought...] of fineweb, took its embedding weights, froze them, and trained a second model with them on the same data. Then, I stacked them. I either removed the last transformer block from the first model when stacked ("Layer removed") or not ("Layer kept").
 
 As a first baseline, I also trained two models with different embedding weights and stacked them, to see what would happen.
 
@@ -258,8 +258,8 @@ Next steps:
   - By default, the models train on the same data *in the same order*, and only their initialization is different.
   - Changing this could make a difference, but I don't think it will
 - Train for longer
-  - I don't know if the embedding weights from model 1 are even trained sufficiently after 8M tokens
-  - Training for longer &mdash; for example, for 1B, or 10B tokens &mdash; might help
+  - I don't know if the embedding weights from model 1 are even trained sufficiently after 8M tokens [EDIT: again, it's 3.25 billion tokens]
+  - Training for longer &mdash; for example, for 1B, or 10B tokens &mdash; might help [EDIT: agian, it's already 3.25 billion tokens]
 - Larger models
   - It's possible that the model size is a limiting factor for the ability to make use of latents
   - If so, scaling will help
@@ -268,6 +268,34 @@ Next steps:
   - Just to see what happens, would removing the last layer of model 1 help, too?
 - Remove more layers of model 2
   - Distinguish between the two hypotheses above
+
+### 2025-02-23
+
+I have done two additional things:
+
+1. Trained for 5x as many tokens as before, so 16.25 billion tokens
+2. Also tried cutting off the last layer of model 1
+
+Here are the results:
+
+|   val_loss_stack |   val_loss_1 |   val_loss_2 | use_first_layer   | use_last_layer   | same_model_twice   |
+|------------------|--------------|--------------|-------------------|------------------|--------------------|
+|         11.3679  |      3.14785 |      3.20779 | False             | False            | False              |
+|         14.7551  |      3.14785 |      3.20779 | True              | False            | False              |
+|          8.91999 |      3.14785 |      3.20779 | False             | True             | False              |
+|         12.2524  |      3.14785 |      3.20779 | True              | True             | False              |
+|         10.0821  |      3.14785 |      3.14785 | False             | False            | True               |
+|         16.0815  |      3.14785 |      3.14785 | True              | False            | True               |
+|         10.547   |      3.14785 |      3.14785 | False             | True             | True               |
+|         16.5895  |      3.14785 |      3.14785 | True              | True             | True               |
+
+A few observations:
+
+1. Training for longer makes model stacking worse, not better.
+2. Removing the last layer of model 1 makes model stacking way worse.
+3. Removing the first layer of model 2 is still really good.
+
+The first point makes me really pessimistic about this method. I'll be working on other things for now.
 
 ## Citation
 
