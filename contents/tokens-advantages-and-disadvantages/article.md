@@ -1,6 +1,6 @@
 # Tokens vs. Bytes
 
-Compared to bytes, tokens have two **advantages**: 1) they lead to shorter sequence lengths; 2) their embeddings contain trainset-wide statistics on the specific combination of bytes that they consist of. They also have two **disadvantages**: 1) they are poorly legible; 2) they encourage memorization.
+Compared to bytes, tokens have two **advantages**: 1) They lead to shorter sequence lengths; 2) Their embeddings contain trainset-wide statistics on the specific combination of bytes that they consist of. They also have two **disadvantages**: 1) They are poorly legible; 2) They encourage memorization.
 
 ## Advantages
 
@@ -32,9 +32,9 @@ This makes the following tasks more difficult (the list is likely not exhaustive
 
 ### Tokens encourage memorization
 
-Above, I've listed many tasks for which token-based models have to memorize the bytes in the tokens. On the one hand, this makes those tasks harder even if the bytes are successfully memorized, because the model has to implicitely recall the bytes internally for the tasks. On the other hand, it also encourages the models to learn by memorization.
+Above, I've listed many tasks for which token-based models have to memorize the bytes in the tokens. On the one hand, this makes those tasks harder even if the bytes are successfully memorized, because the model has to recall the bytes internally for the tasks. On the other hand, it also encourages the models to learn by memorization.
 
-Imagine that the trainset contains three texts that say essentially the same thing, but with subtly different wording. To learn good predictions for the thirs text from the first two efficiently, the model can follow two strategies: 1) generalize from the first two texts, recognize that the third text is about the same thing, and produce the correct tokens from context; 2) memorize the similarity between the first two texts, and that one wording is very similar to the other in meaning, so that when the text appears a third time with slightly different wording again, the model can recognize the similarity and simply produce snippets from one of the previous texts.
+Imagine that the trainset contains three texts that say essentially the same thing, but with subtly different wording. To learn good predictions for the third text from the first two efficiently, the model can follow two strategies: 1) generalize from the first two texts, recognize that the third text is about the same thing, and produce the correct tokens from context; 2) memorize the similarity between the first two texts, and that one wording is very similar to the other in meaning, so that when the text appears a third time with slightly different wording again, the model can recognize the similarity and simply produce snippets from one of the previous texts.
 
 If a model works with tokens, it *must* first memorize which tokens mean the same thing; "t" "o" "k" "e" "n" is the same as "token". This is because if the same text is written slightly differently, the same words can be tokenized differently. If the model is forced to memorize the tokens already, it will be more likely to also memorize other patterns.
 
@@ -42,13 +42,13 @@ I believe that what the model learns early in training strongly determines the e
 
 ## Mixture of Tokenizers
 
-*Wait, this was secretly an ad for [Mixture of Tokenizers](https://github.com/snimu/blog/blob/main/contents/fixing-tokenization/README.md) all along?* HELL YES!
+In this context, I need to mention the [Mixture of Tokenizers](https://github.com/snimu/blog/blob/main/contents/fixing-tokenization/README.md) (MoT), because the advantages and disadvantages of tokens map perfectly onto it.
 
-The simplest Mixture of Tokenizers enriches the token embeddings with byte embeddings through cross-attention. You embed the bytes (and pad them so that they correspond to the tokens), apply self-attention with a narrow sliding window, then apply cross-attention between a single token and the corresponding byte embeddings (this can also be replaced by a batch matrix multiplication).
+Background: The simplest Mixture of Tokenizers enriches the token embeddings with byte embeddings through cross-attention. You embed the bytes (and pad them so that they correspond to the tokens), apply self-attention with a narrow sliding window to the bytes only, then apply cross-attention between a single token and the corresponding byte embeddings (this can also be replaced by a batch matrix multiplication).
 
 This way, we get both the advantages of tokens: shorter sequence lengths, and dataset-wide statistics. We also avoid their disadvantages: the bytes of which a token consists are directly available to the model and legible; and this also prevents the memorization effect I hypothesized above.
 
-And early results show clearly that the Mixture of Tokenizers are at a minimum vastly better at math than pure token-based models, and not worse at other tasks. This was shown by both [@nickcdryan](https://x.com/nickcdryan) [here](https://x.com/nickcdryan/status/1884298932001595529), and by myself [here](https://github.com/snimu/blog/blob/main/contents/mixture-of-tokenizers-math/article.md). I suspect that (and will test whether) this will be great for reasoners.
+And early results show clearly that the Mixture of Tokenizers are at a minimum vastly better at math than pure token-based models, and not worse at other tasks. This was shown by both [@nickcdryan](https://x.com/nickcdryan) [here](https://x.com/nickcdryan/status/1884298932001595529), and by myself [here](https://github.com/snimu/blog/blob/main/contents/mixture-of-tokenizers-math/article.md). I suspect that (and will test whether) this will also be great for reasoners.
 
 ## Citation
 
@@ -57,7 +57,7 @@ And early results show clearly that the Mixture of Tokenizers are at a minimum v
     title={Tokens vs. Bytes},
     author={Sebastian Nicolas Müller},
     year={2025},
-    month={Feb},
+    month={3},
     url={https://github.com/snimu/blog/blob/main/contents/tokens-advantages-and-disadvantages/article.md}
 }
 ```
