@@ -65,3 +65,4 @@ The tick-tock-boom cycle isn't just about making development more orderly—it's
     month={Feb},
     url={https://github.com/snimu/blog/blob/main/contents/tick-tock-boom/article.md}
 }
+```
