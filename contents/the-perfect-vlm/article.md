@@ -54,6 +54,10 @@ If this is trained end-to-end, with text and other images in context, then:
 
 > The authors of that paper use methods like DINOv2, not mask-denoising, but I expect that the latter would also work, and we will see why it is useful when we come to image generation.
 
+Some of you may fear representation collapse if we do this: the easiest way for the image-encoder to always be able to un-mask the image-tokens is to always produce 0 at its output.
+
+But as long as the images are useful for understanding the text coming after them, there is another loss signal working against representation collapse. This makes me believe that representation collapse is not a problem in such a VLM.
+
 Abstaining from SigLIP is fully optional, but I'd be interested in seeing how it works out. I will from now on simply refer to image-tokens, and not mention SigLIP; you can decide for yourself where those tokens come from.
 
 ## Multi-resolution, multi-scale image-understanding
