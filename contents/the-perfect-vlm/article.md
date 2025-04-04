@@ -1,6 +1,6 @@
-# The perfect VLM
+# My dream VLM
 
-My perfect VLM is DeepSeek's [Janus](https://arxiv.org/abs/2410.13848v1) / [Janus-Pro](https://arxiv.org/abs/2501.17811) model with the following modifications:
+My dream VLM is DeepSeek's [Janus](https://arxiv.org/abs/2410.13848v1) / [Janus-Pro](https://arxiv.org/abs/2501.17811) model with the following modifications:
 
 - Merge modalities later at the input
 - Split them earlier at the output
@@ -8,11 +8,13 @@ My perfect VLM is DeepSeek's [Janus](https://arxiv.org/abs/2410.13848v1) / [Janu
 - Actively train image-understanding by de-noising learned mask-tokens
 - Multi-scale prediction on masked image-tokens using the image-understanding backend & a diffusion model
 
-This expands on my previous article [Multi-layer language heads: the output latent is for text (and nothing else)](https://snimu.github.io/2025/03/30/multi-layer-language-heads.html). It is very speculative, and while it is my current dream VLM, I have no *proof* that it would actually work well.
+This would reduce competition between modalities; allow for large-scale, end-to-end training of image-models; enable better image-understanding; bring shared learning between image-generation and image-understanding; increase adversarial robustness for image-inputs; and improve image generation.
 
 This is the starting point (image from the DeepSeek Janus paper):
 
 ![Janus Architecture](images/JanusArchitecture.png)
+
+> The [Janus Architecture](https://arxiv.org/abs/2410.13848v1).
 
 ## Split the heads earlier, merge later
 
@@ -24,17 +26,19 @@ So the first modification that I would do to Janus is to merge inputs from diffe
 
 ![Janus Architecture with split and merge](images/abstract-space.png)
 
+> The [Janus Architecture](https://arxiv.org/abs/2410.13848v1), adapted to have a common backend between modalities only in abstract space.
+
 ## Bidirectional, masked image-understanding
 
-A causal attention mask for image inputs that are subsequently not used for anything makes no sense to me. Images aren't inherently autoregressive; they have no time-component shared by every image. That's a video! So just make the mask bidirectional where the image is, and causal everywhere else.
+A causal attention mask for image inputs that are subsequently not used for anything makes no sense to me. Images aren't inherently autoregressive; they have no time-component shared by every image. That would be a video! So just make the mask bidirectional where the image is, and causal everywhere else.
 
 I also see no reason not to replace some of the patches in the input sequence with learned mask tokens. Then, we can actively train image-understanding embedded into the surrounding text by decoding into the same image-tokens but un-masked (and shifted by one to play nicely with the autoregressive nature of the rest of the model, as is done in [GPT or BERT: Why not both?](https://arxiv.org/abs/2410.24159) or, I think, [LLM2Vec: Large Language Models Are Secretly Powerful Text Encoders](https://arxiv.org/abs/2404.05961)). Masking image tokens is the task from [Masked Autoencoders Are Scalable Vision Learners](https://arxiv.org/abs/2111.06377), just without the encoder-decoder structure that saves compute. It should really help learn to understand images, especially since we work in abstract space.
 
-Below is an illustration of this process. On the left are the inputs, on the right the targets, and in the middle, the transformer, represented by its attention mask. I show the images themselves being masked and produced at the output, but for image-understanding, that what would be masked and produced would be adapted image tokens. After all, this is about image-*understanding*.
-
 ![Masked image-understanding](images/masked-image-understanding.png)
 
-I would train some samples without masking, so that the model gets used to seeing the full image and using it for downstream tasks, and train the rest with between 0% and some maximum percentage (e.g. 100%) of masked patches.
+> Training bidirectional, masked image-understanding. On the left are the inputs, on the right the targets, and in the middle the transformer, represented by its attention mask. I show the images themselves being masked and produced at the output, but for image-understanding, what would be masked and produced would be adapted image tokens. After all, this is about image-*understanding*.
+
+I would train a small percentage of the samples without masking, so that the model gets used to seeing the full image and using it for downstream tasks, and train the rest with between 0% and some maximum percentage (e.g. 100%) of masked patches.
 
 *Should we even use SigLIP for this?*
 
@@ -52,11 +56,9 @@ If this is trained end-to-end, with text and other images in context, then:
 - There will inherently be a CLIP/SigLIP-like effect, because as long as the text is useful for predicting image-patches and images are useful for predicting text, their embeddings will be aligned automatically to be maximally useful to each other
 - In [Scaling Language-Free Visual Representation Learning](http://arxiv.org/abs/2504.01017), the authors show that scaling self-supervised learning (SSL) methods in large transformers works better than CLIP. So why not save the parameters and just train end-to-end?
 
-> The authors of that paper use methods like DINOv2, not mask-denoising, but I expect that the latter would also work, and we will see why it is useful when we come to image generation.
+*Sidenote:* The authors of that paper use methods like DINOv2, not mask-denoising, but I expect that the latter would also work, and we will see why it is useful when we come to image generation.
 
-Some of you may fear representation collapse if we do this: the easiest way for the image-encoder to always be able to un-mask the image-tokens is to always produce 0 at its output.
-
-But as long as the images are useful for understanding the text coming after them, there is another loss signal working against representation collapse. This makes me believe that representation collapse is not a problem in such a VLM.
+Some of you may fear representation collapse if we do this: the easiest way for the image-encoder to always be able to un-mask the image-tokens is to always produce 0 at its output. But as long as the images are useful for understanding the text coming after them, there is another loss signal working against representation collapse. This makes me believe that representation collapse is not a problem in such a VLM.
 
 Abstaining from SigLIP is fully optional, but I'd be interested in seeing how it works out. I will from now on simply refer to image-tokens, and not mention SigLIP; you can decide for yourself where those tokens come from.
 
@@ -66,7 +68,9 @@ Image understanding can be taken further by going multi-resolution / multi-scale
 
 ![Bidirectional, denoising, multi-scale image understanding](images/multi-scale-image-understanding.png)
 
-> As you can see, the bidirectional mask at the image positions trivially allows for a kv-cache.
+> Multi-scale, masked-token, bidirectional image-understanding. Inputs on the left, targets on the right, transformer on the middle. The images are shown as images, and the mask tokens as red patches on top of them, but both are, in reality, flattened image-tokens.
+
+As you can see, the bidirectional mask at the image positions trivially allows for a kv-cache, because the whole image is fed in at once, and the attention mask still applies after the image tokens.
 
 Multi-resolution prediction is what is done in [Ensemble everything everywhere: Multi-scale aggregation for adversarial robustness](https://arxiv.org/abs/2408.05446), where Stanislav Fort and Balaji Lakshminarayanan stack multiple resolutions of the same image along the channel dimension of a CNN, which significantly improves adversarial robustness of the models for basically no extra cost. The same advantage can be used in a transformer, by simply downsampling and masking the image. In transformer, this would of course incur additional costs, but I believe that it would be worth it.
 
@@ -78,7 +82,7 @@ Anything where looking at the image at multiple resolutions is useful. For examp
 
 ![OBEY](images/OBEY.png)
 
-> I don't know where this image originates from, so I unfortunately can't give a source.
+> If you look closely at the image, you will see a bunch of people walking around, but if you squint or look from far away&mdash;in other words, if you reduce the resolution of the image&mdash;the peoples' clothes spell out "OBEY". I don't know where this image originates from, so I unfortunately can't give a source.
 
 Seeing this image in its original resolution *and* a highly downsampled version will allow a model to see both aspects of it at once.
 
@@ -93,21 +97,16 @@ I want the advantages of a bidirectional mask, but for image-generation. This do
 For inference, I would follow these steps:
 
 1. Apply mask tokens to the input, as many as there are patches in your lowest-resolution image. To be clear, these are the same mask tokens used for image understanding
-2. Use the resulting hidden states to guide a small diffusion model
+2. Separate the resulting hidden states from the abstract space with a transformer block and then use its output to guide a small diffusion model
 3. Take the resulting image and replace the masks at the input with it
-    - Why not keep the mask tokens and simply append the generated image at the input?
+    - *Why not keep the mask tokens and simply append the generated image at the input?*
     - Reason 1: Costs. Replacing the mask tokens saves a lot of kv-cache, especially when there are multiple images in context. And the image has to be put to the input anyway
     - Reason 2: To stay closer to the image generation task. Unless we always prepend each scale of each image with a number of masks equal to the number of patches in the image (which would give us plenty of registers, see [Vision Transformers Need Registers](https://arxiv.org/abs/2309.16588) but would be complete overkill to the point of being ridiculous), replacing the mask tokens is needed to make the tasks similar, which is desireable for sharing capabilities between tasks
 4. Generate the next scale and repeat
 
-Below, I show this process in two steps. It shows the inputs and targets. The tranformer is represented by its attention mask. You will notice that there are some additional tokens before, after, and between the different image-scales; these are needed to line up the inputs, outputs, and attention mask.
-
 ![Image generation](images/multi-scale-image-generation.png)
 
-This requires replacing masks at input with the generated image at every scale, which incurs an additional cost. However, not doing so has two disadvantages:
-
-1. It is more expensive, because we have the masks *and* the image in context
-2. It is different than how we present the images when we are just doing image-understanding. As I'll lay out below, having a commonality between the two is very valuable, so it would be stupid to throw that away
+> Multi-scale, masked image generation. To keep the image readable, it does *not* show the diffusion model after the transformer that generates the actual image, nor the transformer block that separates the common backend from the image-understanding- and text-decoders. You will notice that there are some additional tokens before, after, and between the different image-scales; these are needed to line up the inputs, outputs, and attention mask.
 
 ### Advantages
 
@@ -117,8 +116,7 @@ With this method, I'm after the following advantages:
   - That's great for creating the next image
   - It's great for creating the next scale of the same image
   - And it's great for other downstream tasks like thinking about the image
-- For the same reason, the model can make use of the high-quality representation in the hidden states
-- Similarly, we use the same mask-tokens for image-generation as for image-understanding, just more of them. This means that everytime we train the model on image-understanding, we also train it to handle mask tokens
+- Because it uses the image-understanding-encoder, the model can make use of the high-quality representation in the hidden states. We use the same mask-tokens for image-generation as for image-understanding, just more of them. This means that everytime we train the model on image-understanding, we also train it to handle mask tokens
 - This method of generation allows us to use a bidirectional mask, which should be superior to a causal mask not just in understanding the image at the previous scale, but also at generating good representations at the current scale. It also means that we can generate the hidden states for the entire image at once (for a single scale), instead of token-by-token, and then just use a cheap diffusion model for a few steps on top
 - Multi-scale prediction seems to work very well. GPT-4o probably uses it, for example
 - Diffusion works really well for image-generation, especially when it comes to aesthetics. I've seen some speculation that GPT-4o uses it, too
@@ -131,7 +129,7 @@ At first glance, the answer is "yes", because we can simply make use of the atte
 
 ![Image generation: training](images/multi-scale-image-generation-training.png)
 
-In the image above, I have left out the diffusion process, but of course that can be parallelized.
+> Training a multi-scale, bidirectional-per-scale, masked-token image-generation model. The diffusion model is not shown here, but its training can of course be parallelized.
 
 My worry is that the distances between the un-masked images at different scales are higher than they will be during inference. This would cause a distribution shift between training and inference.
 
@@ -144,7 +142,7 @@ However, I see three reasons not to worry:
     - In (for example) 25% of the images, we apply 100% mask tokens, as shown above. We apply the image-generation decoder
     - In the rest of cases, we randomly choose an $x$, with $0 \lt x \lt 100$, and mask $x\%$ of image tokens. We apply both decoders.
 
-Of course, if it is easy to modify RoPE positions dynamically, we could very easily go around the problem, but I don't understand RoPE very well, and it's probably not possible.
+Of course, if it is easy to modify RoPE positions dynamically, we could very easily go around the problem, but I don't understand RoPE well enough to be able to tell (and my expectation is that it's not possible).
 
 ## Conclusion
 
@@ -155,9 +153,9 @@ While I have no guarantees about any of these modifications, I would love to see
 - Multi-scale prediction for image-understanding
 - A diffusion model on top of the image-understanding-backend for image-generation
 
-Here is the full pipeline, forced into the Janus architecture diagram again:
-
 ![Full pipeline](images/full-pipeline.png)
+
+> Proposed modifications to the Janus architecture, rough sketch.
 
 ## Citation
 
@@ -167,6 +165,6 @@ Here is the full pipeline, forced into the Janus architecture diagram again:
     author={Sebastian M\"uller},
     year={2025},
     month={04},
-    url={https://snimu.github.io/2025/04/04/multi-layer-language-heads.html}
+    url={https://snimu.github.io/2025/04/04/my-dream-vlm.html}
 }
 ```
