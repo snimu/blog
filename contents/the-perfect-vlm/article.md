@@ -146,76 +146,95 @@ Anything where looking at the image at multiple resolutions is useful. For examp
 
 Seeing this image in its original resolution *and* a highly downsampled version will allow a model to see both aspects of it at once.
 
-## Multi-resolution, multi-masking-rate image-understanding + diffusion
+Another example for a task that would benefit from a multi-resolution/multi-scale approach is recognizing people/objects in noisy images, such as this one:
 
-Here's where it all comes together: multi-scale prediction is reminicent of the multi-scale aspects of a U-Net, and, more importantly, it is just [Visual Autoregressive Modeling: Scalable Image Generation via Next-Scale Prediction](https://arxiv.org/abs/2404.02905). Combined with masking and diffusion, it would allow for high-quality image generation.
+![Noisy image recognition](/assets/images/2025-04-07-my-dream-vlm/NoisyImageRecognition.jpg)
 
-I want the advantages of a bidirectional mask, but for image-generation. This doesn't allow for autoregressive generation, which loses us the aspect of gradual generation which is crucial. But if we re-use the multi-scale image-understanding-encoder, and run a diffusion model on top of its output hidden states, we gain that advantage back, and more on top.
+> From [this post](https://x.com/torchcompiled/status/1909878529321222619?s=46) by [@torchcompiled](https://x.com/torchcompiled).
 
-I will first describe how I imagine inference to work, then training, and finallys the advantages I hope to gain from this method of image-generation.
+It's pretty easy for humans to recognize this image, but difficult for current VLMs. The difference, I believe, is that humans use multi-resolution vision.
 
-### Inference
+These examples are somewhat toy-like, but they point to an important capability: reliability in image recognition, and an ability to handle complex, previously unseen contexts.
 
-For inference, I would follow these steps:
+## Add a diffusion model
 
-1. Apply mask tokens to the input, as many as there are patches in your lowest-resolution image. To be clear, these are the same mask tokens used for image understanding, and they are all applied at once, in parallel
-2. Separate the resulting hidden states from the abstract space with a transformer block and then use its output to guide a small diffusion model
-3. Take the resulting image and replace the masks at the input with it
-    - *Why not keep the mask tokens and simply append the generated image at the input?*
-    - Reason 1: Costs. Replacing the mask tokens saves a lot of kv-cache, especially when there are multiple images in context. And the image has to be put to the input anyway
-    - Reason 2: To stay closer to the image generation task. Unless we always prepend each scale of each image with a number of masks equal to the number of patches in the image (which would give us plenty of registers, see [Vision Transformers Need Registers](https://arxiv.org/abs/2309.16588) but would be complete overkill to the point of being ridiculous), replacing the mask tokens is needed to make the tasks similar, which is desireable for sharing capabilities between tasks
-4. Generate the next scale and repeat
+Now, all we have to do to to generate images, too, is to add a diffusion model and separate it from the common backend with its own transformer block. We use the activations of the transformer to guide the diffusion model. For every single image that we see, consisting of between 25% and 75% mask-tokens, we apply both the image-understanding head and the image-generation head (a.k.a. a transformer block + diffusion model). This is illustrated below:
 
-![Image generation](images/imgen-inference.png)
+![Multi-decode](/assets/images/2025-04-07-my-dream-vlm/imgen-multi-decode.png)
 
-> Multi-scale, masked image generation. To keep the image readable, it does *not* show the diffusion model after the transformer that generates the actual image, nor the transformer block that separates the common backend from the image-understanding- and text-decoders. You will notice that there are some additional tokens before, after, and between the different image-scales; these are needed to line up the inputs, outputs, and attention mask.
+> Decoding the common hidden states into image-tokens and an actual image via two independent heads, separated by their own transformer blocks.
 
-### Training
+I will get to the details of training and inferencing this setup, but first, some general advantages that we can already determine:
 
-The image-generation as shown in the [inference](#inference) part above has to be done autoregressively. An important question is whether it can be parallelized for pre-training.
+- Multi-scale prediction seems to work very well. It allows the model to first generate rough outlines of an image at low resolution, then refine them step-by-step.
+- We are using multi-scale generation, so a diffusion model, which is naively best at the very local and high-frequency components of an image, can still get the low-frequency, rough outlines right.
+- This method of generation allows us to use a bidirectional mask, which should be superior to a causal mask not just in understanding the image at the previous scale, but also at generating good representations at the current scale. It also means that we can generate the hidden states for the entire image at once (per resolution), instead of token-by-token, and then just use a cheap diffusion model for a few steps on top.
+- We get all the advantages of diffusion models:
+  - Image diversity / easy re-generation with a different noise seed from cached hidden states
+  - Great aesthetics
+  - Easy adaptability of those aesthetics via cheap LoRAs to the diffusion model alone
+  - Multi-step generation for a good efficiency-to-quality trade-off
 
-At first glance, the answer is "yes", because we can simply make use of the attention mask, like this:
+There are a few strange things about this.
 
-![Image generation: training](images/imgen-training.png)
+*Why do we do image-generation from only 25%-75% mask-tokens?*
 
-> Training a multi-scale, bidirectional-per-scale, masked-token image-generation model. The diffusion model is not shown here, but its training can of course be parallelized.
+During inference, we won't, but I will get to that shortly.
 
-My worry is that the distances between the un-masked images at different scales are higher than they will be during inference. This would cause a distribution shift between training and inference.
+During training, it offers multiple advantages:
 
-However, I see three reasons not to worry:
+- Because we use the image-encoder for both image-understanding and -generation, we don't need any text-labels. After all, 25%-75% of the image are still visible, so the hidden states can act as meaningful conditioning. Of course, we *can* still use text-labels, in interleaved text and image data.
+- We enable inpainting. Just draw mask-tokens into your image, feed it through the image-encoder and common backbone, and apply the diffusion model.
+- The image-understanding head is trained in abstract space. To avoid representation collapse, predicting into pixel-space with another head will help, so we don't need as much interleaved text and image data to achieve the same, for example allowing us to train the modalities independently at first if we have a lot of text-only or image-only data.
+- We can always train both image-understanding and image-generation for every image, which does two things:
+  1. It gives a ton of training signal
+  2. It aligns the two, so that they can work well together
+- And just to repeat myself, the transformer blocks separating the two should mean that they don't compete for resources, instead training the common backend to produce highly meaningful representations.
 
-1. We are training image-understanding on the same encoder, where we don't use that masking scheme. So there, the distances will be like the are in image-generation-inference. Since we share most of the model between both tasks, some transfer should happen
-2. We can always post-train on the actual usage. I'm confident that what's learned in pre-training will transfer in post-training
-3. As mentioned above, if push comes to shove, we can simply keep the masks in context during inference, instead of replacing them with the generated image, though that comes with the drawbacks discussed before. On the other hand, it would allow us to do the following (not sure if it useful):
-    - In (for example) 10% of the images, we mask 0% of the input patches and use no decoder; this is to get the model used to using un-masked images in the context of surrounding text
-    - In (for example) 25% of the images, we apply 100% mask tokens, as shown above. We apply the image-generation decoder
-    - In the rest of cases, we randomly choose an $x$, with $0 \lt x \lt 100$, and mask $x\%$ of image tokens. We apply both decoders.
+*What about inference?*
 
-Of course, if it is easy to modify RoPE positions dynamically, we could very easily go around the problem, but I don't understand RoPE well enough to be able to tell (and my expectation is that it's not possible).
+We are currently training with 25-75% mask-tokens, but actual image-understanding should happen with 0% mask-tokens, and image-generation with 100% mask-tokens. How do we do that?
 
-#### The diffusion model
+The simple answer is: post-training.
 
-Just to include this into the article explicitly, here is a sketch of how the diffusion model can be steered by the image-understanding-encoder, and trained in a parallelized fashion:
+For image-generation, train a bit with 100% mask-tokens at the input. After every image-scale, swap the mask-tokens out for the actual image, then generate the next scale. By using 100% mask-tokens at the input, we don't need any pre-existing image. And since we can simply feed in all the mask tokens for a certain resolution in parallel, this is a two-step process per scale: 1) generate image from mask-tokens; 2) swap out mask tokens for actual image and generate. However, step 2 can be done at the same time as the next scale is being generated, which saves even more steps, so this is closer to typical input-tokens than output-tokens in text.
 
-### Advantages
+Here's what that would look like:
 
-With this method, I'm after the following advantages:
+![Image generation](/assets/images/2025-04-07-my-dream-vlm/imgen-inference.png)
 
-- Multi-scale prediction seems to work very well. It allows the model to first generate rough outlines of an image at low resolution, then refine them step-by-step. GPT-4o probably uses it
-- We use the image-understanding-encoder to encode the images at the previous scale, so the model automatically sees the images that it has just created through the eyes of image-understanding
-  - That's great for creating the next image
-  - It's great for creating the next scale of the same image
-  - And it's great for other downstream tasks like thinking about the image
-- Because it uses the image-understanding-encoder, the model can make use of the high-quality representation in the hidden states. We use the same mask-tokens for image-generation as for image-understanding, just more of them. This means that everytime we train the model on image-understanding, we also train it to handle mask tokens
-- This method of generation allows us to use a bidirectional mask, which should be superior to a causal mask not just in understanding the image at the previous scale, but also at generating good representations at the current scale. It also means that we can generate the hidden states for the entire image at once (for a single scale), instead of token-by-token, and then just use a cheap diffusion model for a few steps on top
-- Diffusion works really well for image-generation, especially when it comes to aesthetics.
-  - We are using high-quality, semantically rich hidden states from the actively trained image-understanding-encoder to guide the diffusion model, which should lead to excellent prompt adherence&mdash;often a limiting factor for pure diffusion models
-  - We are using multi-scale generation, so a diffusion model, which is naively best at the very local, high-frequency components of an image, can still get the low-frequency, rough outlines right
-  - We get all the advantages of diffusion models:
-    - Image diversity / easy re-generation with a different noise seed from cached hidden states
-    - Great aesthetics
-    - Easy adaptability of those aesthetics via cheap LoRAs to the diffusion model alone
-    - Multi-step generation for a good efficiency-to-quality trade-off
+> Multi-scale, masked image generation at inference time. To keep the image readable, it does *not* show the diffusion model after the transformer that generates the actual image, nor the transformer block that separates the common backend from the image-understanding- and text-decoders. You will notice that there are some additional tokens before, after, and between the different image-scales; these are needed to line up the inputs, outputs, and attention mask.
+
+You may notice that this is basically [Visual Autoregressive Modeling: Scalable Image Generation via Next-Scale Prediction](https://arxiv.org/abs/2404.02905), with a few changes on top.
+
+As for image-understanding, it's even simpler: post-train on a bunch of interleaved text and image data with 0% mask-tokens over the images, then use the model just like that during inference.
+
+However, there is another way to achieve the same.
+
+## Add the un-masked image
+
+If we simply add the un-masked image after the masked image at every scale, but only decode with the image-understanding and -generation heads on the masked images, at every resolution, we get an even better model, and can get rid of the crutch of replacing mask-tokens with the actual image in image-generation.
+
+First off, here's what that would look like:
+
+![Image generation: training](/assets/images/2025-04-07-my-dream-vlm/imgen-training.png)
+
+> Training a multi-scale, bidirectional-per-scale, masked-token image-generation model. The diffusion model and image-understanding head are not shown here, but their training can of course be parallelized.
+
+There is a single disadvantage to this approach: cost. The number of tokens per image is doubled. Of course, as I've written above, these tokens should be treated more like input-tokens than output-tokens, even in image-generation, so at reasonable sequence lengths, this shouldn't be a huge issue. For inputs containing many images, though, these extra tokens will be felt.
+
+As for advantages:
+
+- During inference, you can simply append the generated image to the mask-tokens, so the image-generation model inherently sees its own creation in its un-masked form at every scale, which allows for three things:
+  1. The image can be used to guide the generation of the next higher resolution
+  2. The un-masked image is immediately visible to the model for downstream text or image tasks
+  3. The model can see the generated image in full resolution right after having generated it at every scale, and (given the right tools) decide that there is something wrong with the image. Then, you could simply re-generate the image by giving the diffusion model a different noise-input, guided by the same hidden states. How to make that decision is a bit of a difficult question, but I would guess that it would be possible in some way. This would be cheap because only the diffusion model would have to be run again. To be clear, I don't mean generating *all* resolutions and *then* re-generating; I mean something like evalutating the difference between the activations for the mask-tokens and the actual image at those positions, and re-generating if the difference is too large.
+- In fact, I want to stress this: for the purpose of downstream tasks, image-generation is exactly equivalent to image-understanding.
+- As for image-understanding, we can now train that capability with a pretty heavily masked image, and still have the CLIP-like effect of having the full-resolution image in context for downstream text generation.
+- In both cases, this setup allows the model to first spell out what it thinks should be under the mask tokens (be there 25% or 100% mask tokens, or anything between), and then see what is actually under them.
+  - In the case of image understanding, this allows the model to use surprisal as a strategy for analyzing the image. And yes, I'd use that during inference: mask the image 25-75% (the exact number is an emprical question) at the position where it is masked during training, and leave it un-masked where it is un-masked during training.
+  - In the case of image generation, this of course does the same, but with the right training data, it might also allow for something else: the model correcting itself during generation (beyond just re-generating the diffusion output).
+- There is a small chance that the mask-tokens act a bit like registers, see [Vision Transformers Need Registers](https://arxiv.org/abs/2309.16588).
 
 ## Conclusion
 
