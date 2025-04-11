@@ -24,11 +24,15 @@ This is the starting point (image from the DeepSeek Janus paper):
 
 > The [Janus Architecture](https://arxiv.org/abs/2410.13848v1).
 
+Let's go through the modifications one by one.
+
 ## Split the heads earlier, merge later
 
 To summarize [my previous article](https://snimu.github.io/2025/03/30/multi-layer-language-heads.html), the first transformer block (attention + MLP) approximately transforms the explicitly text-based representations into abstract ones, and the last layer transforms the abstract representation back into text-space. This is corroborated [here](https://x.com/jonasgeiping/status/1906667091324793307) by Jonas Geiping, co-author of [Scaling up Test-Time Compute with Latent Reasoning: A Recurrent Depth Approach](https://www.arxiv.org/abs/2502.05171) about looping a recurrent block.
 
-The obvious consequence of this is that modalities, which look very different when instantiated into text/images/..., will try to push the model towards producing a representation most fit for producing exactly that modality, as opposed to others. This leads to competition for resources inside the model. Putting a transformer block per modality between the model core and the decoders will reduce that competition, and projecting into an abstract space should have a similar effect.
+The obvious consequence of this is that modalities, which look very different when instantiated into text/images/..., will try to push the model towards producing a representation most fit for producing exactly that modality, as opposed to others. This leads to competition for resources inside the model. Putting a transformer block per modality between the model core and the decoders at the output will reduce that competition, and projecting into an abstract space at the input should have a similar effect.
+
+Since the article mentioned above, more evidence for my belief that modalities should be merged later and split earlier has emerged in the form of [Scaling Laws for Native Multimodal Models](http://arxiv.org/abs/2504.07951). The authors show that early fusion models work better than later fusion models, especially when using a Mixture of Experts (MoE) model. Importantly, they also show that the MoE model develops modality-specific experts, and does so *especially in the early and later layers*, not so much the middle layers, which I see as strong evidence for my claims. And while I'd of course also use a MoE model, I belief that merging late and splitting early gives even more separation, because the models each have their own Attention layer instead of just their own experts in the MLP.
 
 So the first modification that I would do to Janus is to merge inputs from different modalities later, and split their outputs earlier, like this:
 
@@ -40,19 +44,26 @@ So the first modification that I would do to Janus is to merge inputs from diffe
 
 I want to be very clear that this is pure intuition, so take it with a massive heap of salt.
 
-Let's first look at the text-encoder only. Why does it only work in abstract space after the first transformer block? My answer is that abstract thought emerges from the connections between words/tokens, not the individual tokens themselves. Only by mixing the tokens along the sequence dimension via attention (or an SSM or whatever), and then along the model dimension via the MLP, can we get the abstract thoughts (I would say that the MLP does the actual conversion into abstract space, and attention is just there to steer it into abstract space for the right combination of tokens, but that's not super relevant and I'm also not very confident about it).
-
+Let's first look at the text-encoder only. Why does it only work in abstract space after the first transformer block? My answer is that abstract thought emerges from the connections between words/tokens, not the individual tokens themselves. Only by mixing the tokens along the sequence dimension via attention (or an SSM or whatever), and then along the model dimension via the MLP, can we get the abstract thoughts.
 For images, it's similarly very difficult to move into abstract space without seeing the image as a whole, which only happens when the patches are mixed.
+
+As for the output, it's just the inverse situation as the input: in both cases, the fundamental intuition is that moving into and out of abstract space, from/to a specific instantiation of some modality, takes a certain amount of thought/computation which is hard to learn for a single linear layer, and might even be impossible without mixing tokens.
 
 Therefore, I think *at least* one transformer block per modality at the input, and another one at the output, is needed to properly separate the specific quirks of each modality from the shared semantic understanding used and refined by the shared backend.
 
+**Sidenote:** there might be the alternative to just use a single attention layer, but without a residual connection, at least at the output. This is what I did [here](https://x.com/omouamoua/status/1887595667427926345?s=46) with the [Mixture of Tokenizers](https://snimu.github.io/2025/01/28/mixture-of-tokenizers-math.html) architecture, and it worked extremely well. However, I don't want to get into that here; the main point is that there needs to be a way to properly separate the modalities, and that that requires some mixing of the tokens/patches.
+
 ## Bidirectional image-understanding
 
-My next modification is to make the attention mask bidirectional within the limits of a single image.
+My next modification is to make the attention mask bidirectional within the limits of a single image, like this:
 
-Yes, [PaliGemma](https://arxiv.org/abs/2407.07726) and [Gemma](https://huggingface.co/blog/gemma3) use it, which is a good reason to do it already; but I have more reasons than appeal to authority.
+![Bidirectional image-understanding](images/imun-bidir.png)
 
-A causal attention mask for image inputs that are subsequently not used for anything makes no sense to me. Images aren't inherently autoregressive; they have no time-component shared by every image. That would be a video! So just make the mask bidirectional where the image is, and causal everywhere else. This way, every part of the image can see every other part of the image, which seems algorithmically important; and the attention mechanism at the image-tokens is used to full capacity, instead of half (as would be the case with a causal mask).
+> Bidirectional image-understanding. On the left are the inputs, on the right the targets, and in the middle the transformer, represented by its attention mask. Image-tokens are shown as images for visualization, but are in practice flattened embeddings. The four-armed giraffe was generated by [Imagen-3](https://deepmind.google/technologies/imagen-3/).
+
+Yes, [PaliGemma](https://arxiv.org/abs/2407.07726) and [Gemma](https://huggingface.co/blog/gemma3) use it, which is already a good reason to do it; but I have more reasons than appeal to authority.
+
+A causal attention mask for image inputs that are subsequently not used for anything except downstream text-generation makes no sense to me. Images aren't inherently autoregressive; they have no time-component shared by every image. That would be a video! So just make the mask bidirectional where the image is, and causal everywhere else. This way, every part of the image can see every other part of the image, which seems algorithmically important; and the attention mechanism at the image-tokens is used to full capacity, instead of half (as would be the case with a causal mask).
 
 Those are the theoretical advantages of bidirectional masks, but the thing that made me *feel* those advantages was actually xAI's Aurora model, specifically this image:
 
@@ -60,35 +71,17 @@ Those are the theoretical advantages of bidirectional masks, but the thing that 
 
 > From [this post](https://x.com/fofrai/status/1867629384099934557?s=46) by [@fofrAI](https://x.com/fofrai)
 
-Here is my speculation on why this image looks so weird, from [this post](https://x.com/omouamoua/status/1867926507391537260?s=46) by [@omouamoua](https://x.com/omouamoua) (that's me):
+Here is my speculation on why this image looks so weird:
 
-```txt
-Regarding the weird hands:
+![Problems with autoregressive image-generation](images/ProblemsWithAutoregressiveImgen.png)
 
-I have a hypothesis that generating images autoregressively left-to-right, then top-to-bottom — as I think Aurora does — will lead to errors mostly at the bottom of the image.
-
-Of course, the obtuse way to explain this is by saying that autoregressive errors accumulate.
-
-But in the case of images, there is a more concrete explanation: the model generates plausible patches for the first row it creates. Here, that’s two hairlines from people at different distances to the camera; makes sense. But as the rows are created with plausible looking patches, one by one, a conflict emerges: both Arnolds intersect, and you need to resolve this in a plausible manner when you have never planned for it. That’s a high stakes situation where a single error can derail the whole image.
-
-This is made worse by the tendency of undertrained models to make the highest-probability token pretty repetitive, and not as dependent on previous tokens as would be ideal. This is likely why there are two Arnolds in the image, and also why both must have a hand in the foreground, forcing the model to resolve this by screwing it up.
-
-Essentially, a next-token predictor never explicitly learns to care about the composition of the entire output.
-
-Multi-token prediction would fix this.
-```
+> From [this post](https://x.com/omouamoua/status/1867926507391537260?s=46) by [@omouamoua](https://x.com/omouamoua) (that's me).
 
 A bidirectional mask in an image *is* multi-token prediction, at least in a way. And yes, this is about image-generation, but 1) I want those advantages for image-generation too (see later how it's connected to image-understanding), and 2) I'm convinced that similar considerations apply to image-understanding as well.
 
-Here's what this would look like:
-
-![Bidirectional image-understanding](images/imun-bidir.png)
-
-> Bidirectional image-understanding. On the left are the inputs, on the right the targets, and in the middle the transformer, represented by its attention mask. Image-tokens are shown as images for visualization, but are in practice flattened embeddings. The four-armed giraffe was generated by [Imagen-3](https://deepmind.google/technologies/imagen-3/)
-
 ### Efficiency and KV-cache
 
-Just to stress: if we do this, we have to forward-pass the entire image at once. This is computationally expensive, but no more than passing a user-input with the same number of tokens as the image. And just like that user-input, we want to do it in parallel anyway, which means this costs us almost nothing compared to a causal mask.
+Just to stress: if we do this, we have to forward-pass the entire image at once. This is computationally expensive, but no more than passing a user-input with the same number of tokens as the image. And just like that user-input, we want to do it in parallel anyway, which means this costs us almost nothing more than a causal mask.
 
 And because we can just feed in the entire image at once, and the tokens *after* the image tokens are masked, we can use a kv-cache.
 
@@ -102,13 +95,13 @@ I see no reason not to actively train image-understanding by replacing some of t
 
 > Training bidirectional, masked image-understanding. On the left are the inputs, on the right the targets, and in the middle the transformer, represented by its attention mask. I show the images themselves being masked and produced at the output, but for image-understanding, what would be masked and produced would be adapted image tokens. After all, this is about image-*understanding*.
 
-I would train a small percentage of the samples without masking, so that the model gets used to seeing the full image and using it for downstream tasks, and train the rest with between 0% and 100% of masked patches. It will become clear why I want to use up to 100% of the image-tokens when I get to image-generation.
+I would train a small percentage of the samples without masking, so that the model gets used to seeing the full image and using it for downstream tasks, and train the rest with, for example, between 25% and 75% of masked patches.
 
-### Should we even use SigLIP for this?
+## Go early fusion
 
-This is a question that I'm uncertain about. The idea behind it is: if we already actively train image understanding, do we not limit ourselves by using a frozen encoder that was trained by projecting into text-space, instead of training end-to-end?
+Throw away the SigLIP encoder.
 
-Imagine the following architecture:
+Instead, use the following architecture:
 
 1. Image is split into patches
 2. Patches are flattened
@@ -119,12 +112,10 @@ If this is trained end-to-end, with text and other images in context, then:
 
 - There will inherently be a CLIP/SigLIP-like effect, because as long as the text is useful for predicting image-patches and images are useful for predicting text, their embeddings will be aligned automatically to be maximally useful to each other
 - In [Scaling Language-Free Visual Representation Learning](http://arxiv.org/abs/2504.01017), the authors show that scaling self-supervised learning (SSL) methods in large transformers works better than CLIP. So why not save the parameters and just train end-to-end?
-
-*Sidenote:* The authors of that paper use methods like DINOv2, not mask-denoising, but I expect that the latter would also work, and we will see why it is useful when we come to image-generation.
+- Most importantly, I will again point to [Scaling Laws for Native Multimodal Models](http://arxiv.org/abs/2504.07951). Early-fusion MoEs are significantly better than late-fusion models. Most importantly, it is best to use way more data and fewer parameters for the early-fusion than the late-fusion model, assuming the same training FLOP budget. That means that the early-fusion model of the same or higher quality can be run much more cheaply than the late-fusion model, because it has fewer parameters.
+  - *Sidenote:* The authors use a slightly different definition of early-fusion than me, but I'm still calling my models early-fusion because they are trained end-to-end, without any independently trained encoders.
 
 Some of you may fear representation collapse if we do this: the easiest way for the image-encoder to always be able to un-mask the image-tokens is to always produce 0 at its output. But as long as the images are useful for understanding the text coming after them, there is another loss signal working against representation collapse. This makes me believe that representation collapse is not a problem in such a VLM.
-
-I don't know for sure if this will work, but I suspect so. From hereon out, I will assume that this is the case, and refer to the image-inputs as image-tokens.
 
 ## Multi-resolution, multi-scale image-understanding
 
@@ -158,7 +149,7 @@ These examples are somewhat toy-like, but they point to an important capability:
 
 ## Add a diffusion model
 
-Now, all we have to do to to generate images, too, is to add a diffusion model and separate it from the common backend with its own transformer block. We use the activations of the transformer to guide the diffusion model. For every single image that we see, consisting of between 25% and 75% mask-tokens, we apply both the image-understanding head and the image-generation head (a.k.a. a transformer block + diffusion model). This is illustrated below:
+Now, all we have to do to to generate images too, is to add a diffusion model and separate it from the common backend with its own transformer block. We use the activations of the transformer to guide the diffusion model. For every single image that we see, consisting of between 25% and 75% mask-tokens, we apply both the image-understanding head and the image-generation head (a.k.a. a transformer block + diffusion model). This is illustrated below:
 
 ![Multi-decode](images/imgen-multi-decode.png)
 
@@ -166,8 +157,8 @@ Now, all we have to do to to generate images, too, is to add a diffusion model a
 
 I will get to the details of training and inferencing this setup, but first, some general advantages that we can already determine:
 
-- Multi-scale prediction seems to work very well. It allows the model to first generate rough outlines of an image at low resolution, then refine them step-by-step.
-- We are using multi-scale generation, so a diffusion model, which is naively best at the very local and high-frequency components of an image, can still get the low-frequency, rough outlines right.
+- We will see in a moment that we are doing [Visual Autoregressive Modeling: Scalable Image Generation via Next-Scale Prediction](https://arxiv.org/abs/2404.02905) (multi-scale generation), which seems to work very well. It allows the model to first generate rough outlines of an image at low resolution, then refine them step-by-step. We are predicting one scale, then the next, and so on. And since the model sees its own outputs through the image-encoder, this is meaningful multi-scale generation.
+- Because we are using multi-scale generation, a diffusion model, which is naively best at the very local and high-frequency components of an image, can still get the low-frequency, rough outlines right.
 - This method of generation allows us to use a bidirectional mask, which should be superior to a causal mask not just in understanding the image at the previous scale, but also at generating good representations at the current scale. It also means that we can generate the hidden states for the entire image at once (per resolution), instead of token-by-token, and then just use a cheap diffusion model for a few steps on top.
 - We get all the advantages of diffusion models:
   - Image diversity / easy re-generation with a different noise seed from cached hidden states
@@ -175,7 +166,7 @@ I will get to the details of training and inferencing this setup, but first, som
   - Easy adaptability of those aesthetics via cheap LoRAs to the diffusion model alone
   - Multi-step generation for a good efficiency-to-quality trade-off
 
-There are a few strange things about this.
+However, there are a few strange things about this.
 
 *Why do we do image-generation from only 25%-75% mask-tokens?*
 
@@ -183,12 +174,12 @@ During inference, we won't, but I will get to that shortly.
 
 During training, it offers multiple advantages:
 
-- Because we use the image-encoder for both image-understanding and -generation, we don't need any text-labels. After all, 25%-75% of the image are still visible, so the hidden states can act as meaningful conditioning. Of course, we *can* still use text-labels, in interleaved text and image data.
+- Because we use the image-encoder for both image-understanding and -generation, we don't need any text-labels to condition the diffusion model. After all, 25%-75% of the image are still visible, so the hidden states can act as meaningful conditioning. Of course, we *can* still use text-labels through interleaved text and image data, but we can also train on any image-data, without having to provide a good description of the image.
 - We enable inpainting. Just draw mask-tokens into your image, feed it through the image-encoder and common backbone, and apply the diffusion model.
-- The image-understanding head is trained in abstract space. To avoid representation collapse, predicting into pixel-space with another head will help, so we don't need as much interleaved text and image data to achieve the same, for example allowing us to train the modalities independently at first if we have a lot of text-only or image-only data.
-- We can always train both image-understanding and image-generation for every image, which does two things:
+- We can always train both image-understanding and image-generation for every image, which does three things:
   1. It gives a ton of training signal
   2. It aligns the two, so that they can work well together
+  3. It avoids representation collapse even without surrounding text, because the diffusion model is trained against a fixed ground-truth instead of the model's own hidden states.
 - And just to repeat myself, the transformer blocks separating the two should mean that they don't compete for resources, instead training the common backend to produce highly meaningful representations.
 
 *What about inference?*
@@ -197,15 +188,13 @@ We are currently training with 25-75% mask-tokens, but actual image-understandin
 
 The simple answer is: post-training.
 
-For image-generation, train a bit with 100% mask-tokens at the input. After every image-scale, swap the mask-tokens out for the actual image, then generate the next scale. By using 100% mask-tokens at the input, we don't need any pre-existing image. And since we can simply feed in all the mask tokens for a certain resolution in parallel, this is a two-step process per scale: 1) generate image from mask-tokens; 2) swap out mask tokens for actual image and generate. However, step 2 can be done at the same time as the next scale is being generated, which saves even more steps, so this is closer to typical input-tokens than output-tokens in text.
+For image-generation, train a bit with 100% mask-tokens at the input. After every image-scale, swap the mask-tokens out for the actual image, then generate the next scale. By using 100% mask-tokens at the input, we don't need any pre-existing image. And since we can simply feed in all the mask tokens for a certain resolution in parallel, this is a two-step process per scale: 1) generate image from mask-tokens; 2) swap out mask tokens for actual image and generate. However, step 2 can be done at the same time as the next scale is being generated, which saves even more steps, so this is closer in costs to typical input-tokens than output-tokens.
 
 Here's what that would look like:
 
 ![Image generation](images/imgen-inference.png)
 
 > Multi-scale, masked image generation at inference time. To keep the image readable, it does *not* show the diffusion model after the transformer that generates the actual image, nor the transformer block that separates the common backend from the image-understanding- and text-decoders. You will notice that there are some additional tokens before, after, and between the different image-scales; these are needed to line up the inputs, outputs, and attention mask.
-
-You may notice that this is basically [Visual Autoregressive Modeling: Scalable Image Generation via Next-Scale Prediction](https://arxiv.org/abs/2404.02905), with a few changes on top.
 
 As for image-understanding, it's even simpler: post-train on a bunch of interleaved text and image data with 0% mask-tokens over the images, then use the model just like that during inference.
 
@@ -219,22 +208,24 @@ First off, here's what that would look like:
 
 ![Image generation: training](images/imgen-training.png)
 
-> Training a multi-scale, bidirectional-per-scale, masked-token image-generation model. The diffusion model and image-understanding head are not shown here, but their training can of course be parallelized.
+> Training a multi-scale, bidirectional-per-scale, masked-token image-generation model with masked and un-masked images at every scale.
 
-There is a single disadvantage to this approach: cost. The number of tokens per image is doubled. Of course, as I've written above, these tokens should be treated more like input-tokens than output-tokens, even in image-generation, so at reasonable sequence lengths, this shouldn't be a huge issue. For inputs containing many images, though, these extra tokens will be felt.
+There is a single disadvantage to this approach: cost. The number of tokens per image is doubled. Of course, as I've written above, these tokens should be treated more like input-tokens than output-tokens, even in image-generation, so while it has high memory- and compute-intensity, it can be parallelized a lot. For inputs containing many images, though, these extra tokens will be felt.
 
 As for advantages:
 
-- During inference, you can simply append the generated image to the mask-tokens, so the image-generation model inherently sees its own creation in its un-masked form at every scale, which allows for three things:
+- During inference, you can simply append the generated image to the mask-tokens, so the image-generation model inherently sees its own creation in its un-masked form after generation at every scale, which allows for three things:
   1. The image can be used to guide the generation of the next higher resolution
   2. The un-masked image is immediately visible to the model for downstream text or image tasks
-  3. The model can see the generated image in full resolution right after having generated it at every scale, and (given the right tools) decide that there is something wrong with the image. Then, you could simply re-generate the image by giving the diffusion model a different noise-input, guided by the same hidden states. How to make that decision is a bit of a difficult question, but I would guess that it would be possible in some way. This would be cheap because only the diffusion model would have to be run again. To be clear, I don't mean generating *all* resolutions and *then* re-generating; I mean something like evalutating the difference between the activations for the mask-tokens and the actual image at those positions, and re-generating if the difference is too large.
-- In fact, I want to stress this: for the purpose of downstream tasks, image-generation is exactly equivalent to image-understanding.
+  3. The model can see the generated image in full resolution right after having generated it at every scale, and (given the right tools) decide that there is something wrong with the image. Then, we could simply re-generate the image by giving the diffusion model a different noise-input, guided by the same hidden states. To be clear, I don't mean generating *all* resolutions and *then* re-generating; I mean something like evalutating the difference between the activations for the mask-tokens and the actual image at those positions, and re-generating if the difference is too large. This would be cheap because only the diffusion model would have to be run again.
+- In fact, I want to stress this: for the purpose of downstream tasks, image-generation is now exactly equivalent to image-understanding.
 - As for image-understanding, we can now train that capability with a pretty heavily masked image, and still have the CLIP-like effect of having the full-resolution image in context for downstream text generation.
 - In both cases, this setup allows the model to first spell out what it thinks should be under the mask tokens (be there 25% or 100% mask tokens, or anything between), and then see what is actually under them.
   - In the case of image understanding, this allows the model to use surprisal as a strategy for analyzing the image. And yes, I'd use that during inference: mask the image 25-75% (the exact number is an emprical question) at the position where it is masked during training, and leave it un-masked where it is un-masked during training.
-  - In the case of image generation, this of course does the same, but with the right training data, it might also allow for something else: the model correcting itself during generation (beyond just re-generating the diffusion output).
+  - In the case of image generation, this of course does the same, but with the right training data, it might also allow for something else: the model correcting itself during generation (beyond just re-generating the diffusion output; no, I mean correcting the layout from the low-resolution image in the high-resolution image).
 - There is a small chance that the mask-tokens act a bit like registers, see [Vision Transformers Need Registers](https://arxiv.org/abs/2309.16588).
+
+I believe that this method would yield a VLM that is very strong at both image-understanding and image-generation, and would still work well with text. In fact, with the right training data, I think that the modalities will improve each other.
 
 ## Conclusion
 
