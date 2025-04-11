@@ -148,7 +148,7 @@ Seeing this image in its original resolution *and* a highly downsampled version 
 
 Another example for a task that would benefit from a multi-resolution/multi-scale approach is recognizing people/objects in noisy images, such as this one:
 
-![Noisy image recognition](/assets/images/2025-04-07-my-dream-vlm/NoisyImageRecognition.jpg)
+![Noisy image recognition](images/NoisyImageRecognition.jpg)
 
 > From [this post](https://x.com/torchcompiled/status/1909878529321222619?s=46) by [@torchcompiled](https://x.com/torchcompiled).
 
@@ -160,7 +160,7 @@ These examples are somewhat toy-like, but they point to an important capability:
 
 Now, all we have to do to to generate images, too, is to add a diffusion model and separate it from the common backend with its own transformer block. We use the activations of the transformer to guide the diffusion model. For every single image that we see, consisting of between 25% and 75% mask-tokens, we apply both the image-understanding head and the image-generation head (a.k.a. a transformer block + diffusion model). This is illustrated below:
 
-![Multi-decode](/assets/images/2025-04-07-my-dream-vlm/imgen-multi-decode.png)
+![Multi-decode](images/imgen-multi-decode.png)
 
 > Decoding the common hidden states into image-tokens and an actual image via two independent heads, separated by their own transformer blocks.
 
@@ -201,7 +201,7 @@ For image-generation, train a bit with 100% mask-tokens at the input. After ever
 
 Here's what that would look like:
 
-![Image generation](/assets/images/2025-04-07-my-dream-vlm/imgen-inference.png)
+![Image generation](images/imgen-inference.png)
 
 > Multi-scale, masked image generation at inference time. To keep the image readable, it does *not* show the diffusion model after the transformer that generates the actual image, nor the transformer block that separates the common backend from the image-understanding- and text-decoders. You will notice that there are some additional tokens before, after, and between the different image-scales; these are needed to line up the inputs, outputs, and attention mask.
 
@@ -217,7 +217,7 @@ If we simply add the un-masked image after the masked image at every scale, but 
 
 First off, here's what that would look like:
 
-![Image generation: training](/assets/images/2025-04-07-my-dream-vlm/imgen-training.png)
+![Image generation: training](images/imgen-training.png)
 
 > Training a multi-scale, bidirectional-per-scale, masked-token image-generation model. The diffusion model and image-understanding head are not shown here, but their training can of course be parallelized.
 
