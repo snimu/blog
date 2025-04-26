@@ -2,11 +2,18 @@
 
 I am bullish on state-space models (SSMs) because I believe that ***the path to AGI lies in infinite context length***.
 
-This is because infinite context length allows for human-like tool-use, which in turn allows models to externalize their intelligence; the tools hold the specific, instantiated state of what the model is doing, while the model itself holds an abstract representation of that state and its goals as well as the little bit of instantiated data it currently needs, leading to a specialization between tools to the task at hand. This means that both the model and its tools can make use of their comparative advantage. It is, I believe, what humans do, and for cost reasons, it cannot be done using self-attention.
+This is because infinite context length allows for human-like tool-use, which in turn allows models to externalize their intelligence; the tools hold the specific, instantiated state of what the model is doing, while the model itself holds an abstract representation of that state and its goals as well as the little bit of instantiated data it currently needs, leading to a specialization between tools to the task at hand. This means that both the model and its tools can make use of their comparative advantage. It is, I believe, what humans do, and it cannot be done using self-attention for reasons of cost.
 
 So let's take this paradigm to its logical conclusion: ***I posit that an LLM should never output anything but tool calls and their arguments.*** Not only is tool-use a multiplier of LLM capabilities, it also alleviates the necessity for the LLM to have perfect access to the full context, making SSMs an attractive option.
 
-To drive home these points, I will go into detail about an example of infinite context use-cases: text generation. Then, I will quickly touch on more tasks in which tool use with infinite context is helpful, and discuss some thoughts on the architecture and training of such models.
+Table of contents:
+
+- [Text editing](#text-editing): an exemplary task benefitting from infinite tool use
+- [Other examples](#other-examples): [3D Generation](#3d-generation), [Video Understanding](#video-understanding), and [Robotics](#robotics)
+- [AI safety](#ai-safety): The safety advantages from infinite tool use
+- [Thoughs on Training](#thoughts-on-training)
+- [Thoughts on Architecture](#thoughts-on-architecture)
+- [Conclusion](#conclusion)
 
 ## Text editing
 
@@ -40,7 +47,7 @@ And it wouldn't prevent the model from generating easy answers in forward-only m
 
 There are many things that could be improved by the framework of infinite tool-use: 3D generation, video understanding, robotics, etc.
 
-### 3D generation
+### 3D Generation
 
 CAD libraries exist for Python, and I do believe that there are programming languages for several Game Engines. Therefore, an LLM could create 3D objects through code. To do so, the model should have these tools available to it:
 
@@ -61,7 +68,7 @@ This would impart the following advantages:
   - But with a CAD-library&mdash;or numpy, as OpenAI's o3 is apparently doing&mdash;and the aforementioned tools, gradual generation of the object over many cycles of improvement becomes possible; in other words, human workflows are enabled
 - All the advantages of the text-editing tool discussed above are available to the model
 
-### Video understanding
+### Video Understanding
 
 A full-attention LLM is un-usable for days-long videos because it's way too inefficient. A pure SSM is un-usable for the task because it cannot attend to enough of the video. But an SSM *with tools* can re-watch whatever part of the video it needs to understand what it has to, write down, edit, and revisit running notes, and more, without exploding costs. This makes it the obvious choice.
 
@@ -69,11 +76,11 @@ A full-attention LLM is un-usable for days-long videos because it's way too inef
 
 All the advantages mentioned before a applicable to robotics: interleaved video (and audio etc.) understanding, planning, and acting, all over infinite context lengths, is much closer to what humans do than pure forward-generation by context-window-constrained, attention-based, forward-only VLMs currently do. I'm not convinced that it is enough without continual learning, and the processes aren't truly parallel anyway, but I do believe that it's a step in the right direction.
 
-## AI safety
+## AI Safety
 
 Seeing the full editing process (with version control, potentially available to the LLM as well) is bound to be fascinating. More importantly, it has safety advantages: since the model relies heavily on the external tool, which is legible to humans because it's mostly text, lying is disincentiviced because it makes the actual task harder by forcing the model to keep track of far more variables, thus increasing the success-rate of honest LLMs relative to dishonest ones.
 
-## Thoughts on training
+## Thoughts On Training
 
 Obviously good training data is needed. The challenge is that infinite tool-use requires truly agentic behavior: Understanding goals in detail, choosing tools, spotting and correcting mistakes, and so on. The obvious solution is to just scale RL; but can we find some good seed-data? I believe so.
 
@@ -85,7 +92,7 @@ For 3D generation, I imagine such data to be much harder to come by, so a strong
 
 However, using SSMs and interacting only through tools means that there is likely no need to actively train for infinite context length, as we train to recover from mistakes & edit from many different starting points. And that is my main takeaway: SSMs being forgetful means that just training fairly long context windows from diverse start and end points will probably generalize to infinite context windows.
 
-## Thoughts on architecture
+## Thoughts On Architecture
 
 For architecture, I'm open to all possibilities; [RWKV](https://www.rwkv.com/), [Mamba](https://arxiv.org/abs/2312.00752), [xLSTM](https://arxiv.org/abs/2405.04517), [Titans](https://arxiv.org/abs/2501.00663), [Test-Time-Training](https://arxiv.org/abs/2407.04620), etc. I'm also open to using sliding-window self-attention with a really large sliding window (100k tokens or whatever you can take) every few layers to give the model high-resolution access to the immediate context, though then we really have to train on context lengths much longer than the sliding window to train the model to make proper use of the SSMs.
 
