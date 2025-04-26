@@ -8,14 +8,21 @@ So let's take this paradigm to its logical conclusion: ***I posit that an LLM sh
 
 Table of contents:
 
-- [Text editing](#text-editing): an exemplary task benefitting from infinite tool use
-- [Other examples](#other-examples): [3D Generation](#3d-generation), [Video Understanding](#video-understanding), and [Robotics](#robotics)
+- [Examples](#examples): exemplary tasks benefitting from infinite tool use
+  - [Text Editing](#text-editing)
+  - [3D Generation](#3d-generation)
+  - [Video Understanding](#video-understanding)
+  - [Robotics](#robotics)
 - [AI safety](#ai-safety): The safety advantages from infinite tool use
 - [Thoughs on Training](#thoughts-on-training)
 - [Thoughts on Architecture](#thoughts-on-architecture)
 - [Conclusion](#conclusion)
 
-## Text editing
+## Examples
+
+There are many things that could be improved by the framework of infinite tool-use: text editing, 3D generation, video understanding, robotics, etc.
+
+### Text Editing
 
 Here's how I wrote this article *so far*: I had an idea and wrote it down in a few bullet points. Then, I wrote the introduction. While doing that, I jumped to the end of the article, added a few more bullet points, and edited others. I started writing this section, interrupted it by writing down an idea about the architecture of such models, then came back here; realized that I should re-write this section, started doing that, edited the introduction to fit, went back to the re-write, and here we are. I'm not even half-way done with the article and I'm sure I already forgot a bunch of steps that I took.
 
@@ -42,10 +49,6 @@ Additionally, the use of SSMs in this context would enable the following:
 - While refreshing the model's memory about fine-grained details (specific sections, sentences, words, what the goal of the whole process is, ...) through tool-use
 
 And it wouldn't prevent the model from generating easy answers in forward-only mode, by doing the equivalent of tying out a quick response and immediately clicking "send".
-
-## Other examples
-
-There are many things that could be improved by the framework of infinite tool-use: 3D generation, video understanding, robotics, etc.
 
 ### 3D Generation
 
@@ -80,7 +83,7 @@ All the advantages mentioned before a applicable to robotics: interleaved video 
 
 Seeing the full editing process (with version control, potentially available to the LLM as well) is bound to be fascinating. More importantly, it has safety advantages: since the model relies heavily on the external tool, which is legible to humans because it's mostly text, lying is disincentiviced because it makes the actual task harder by forcing the model to keep track of far more variables, thus increasing the success-rate of honest LLMs relative to dishonest ones.
 
-## Thoughts On Training
+## Thoughts on Training
 
 Obviously good training data is needed. The challenge is that infinite tool-use requires truly agentic behavior: Understanding goals in detail, choosing tools, spotting and correcting mistakes, and so on. The obvious solution is to just scale RL; but can we find some good seed-data? I believe so.
 
@@ -92,7 +95,7 @@ For 3D generation, I imagine such data to be much harder to come by, so a strong
 
 However, using SSMs and interacting only through tools means that there is likely no need to actively train for infinite context length, as we train to recover from mistakes & edit from many different starting points. And that is my main takeaway: SSMs being forgetful means that just training fairly long context windows from diverse start and end points will probably generalize to infinite context windows.
 
-## Thoughts On Architecture
+## Thoughts on Architecture
 
 For architecture, I'm open to all possibilities; [RWKV](https://www.rwkv.com/), [Mamba](https://arxiv.org/abs/2312.00752), [xLSTM](https://arxiv.org/abs/2405.04517), [Titans](https://arxiv.org/abs/2501.00663), [Test-Time-Training](https://arxiv.org/abs/2407.04620), etc. I'm also open to using sliding-window self-attention with a really large sliding window (100k tokens or whatever you can take) every few layers to give the model high-resolution access to the immediate context, though then we really have to train on context lengths much longer than the sliding window to train the model to make proper use of the SSMs.
 
