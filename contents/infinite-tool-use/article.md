@@ -115,6 +115,6 @@ The tool-use paradigm is in full swing already&mdash;o3 by OpenAI, agentic RAG m
     author={Sebastian Nicolas Müller},
     year={2025},
     month={04},
-    url={https://snimu.github.io/2025/04/26/infinite-tool-use.html}
+    url={https://snimu.github.io/2025/04/28/infinite-tool-use.html}
 }
 ```
