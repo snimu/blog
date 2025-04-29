@@ -12,7 +12,6 @@ Table of contents:
   - [Text Editing](#text-editing)
   - [3D Generation](#3d-generation)
   - [Video Understanding](#video-understanding)
-  - [Robotics](#robotics)
 - [AI safety](#ai-safety)
 - [Thoughs on Training](#thoughts-on-training)
 - [Thoughts on Architecture](#thoughts-on-architecture)
