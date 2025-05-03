@@ -22,14 +22,13 @@ To be clear, I think we do need to train a bit without tags, or with some tags d
 
 ## Why does this lead to a separation of simulacra?
 
-- A model can learn many things, but what it says depends on its conditioning.
-  - When the conditioning between different texts is very indistinct, the model will learn the most abundant one
-  - Just adding an author, date, and source tag will do wonders here, enabling the model to learn and, importantly, express much more distinct simulations, conditioned on much more explicit inputs
-    - If a single source says the same thing over and over again in response to some prefix, the model can easily predict that completion given tags, reducing the loss and thus the weight of that source
-    - If there is another source with a different tag, which completes the same prefix a different way, the model can learn to differentiate the two, and build a more complex and complete understanding of what's going on
-    - Analogy: RL CoT as training data; RL simply weights the gradients by data quality. Tags allow the mode to do essentially the same thing during pre-training
+A model can learn many things, but what it says depends on its conditioning. When the conditioning between different texts is very indistinct, the model will learn the most abundant completion. This is by necessity: even if it is possible for the model to memorize all the possible completions, producing the most common one will minimize loss if the LLM cannot successfully infer the context of the text. Yes, this is phrased as if LLMs were trained autoregressively, but it certainly has impact on them even in teacher-forced pre-training. After all, context is very abstract, and appears many times over in texts.
 
-The tags are essentially a system prompt; but because they apply throughout pre-training, and are so distinct from the other tokens, there is a real separation between the guidance that they give and the rest of the text. Essentially, a soft but real separation between program and data (cc Simon Willison).
+Just adding an author, date, and source tag will do wonders here, enabling the model to learn and, importantly, express much more distinct simulations, conditioned on much more explicit inputs. If a single source says the same thing over and over again in response to some prefix, the model can easily predict that completion given tags, reducing the loss and thus the weight of that source. If there is another source with a different tag, which completes the same prefix a different way, the model can learn to differentiate the two, and build a more complex and complete understanding of what's going on.
+
+Here's an analogy: RL uses Chains of Thought as training data; RL simply weights the gradients of those CoTs by data quality. Tags allow the model to do essentially the same thing during pre-training.
+
+The tags are similar to a system prompt; but because they apply throughout pre-training, and are so distinct from the other tokens, there is a real separation between the guidance that they give and the rest of the text. In other words, a soft but real separation between program and data can potentially be achieved via tags, because the tags impact the *program* simulated by the LLM so strongly that other inputs are more distinctly data-only. Obviously, this wouldn't fully fix everything, but I believe it could help.
 
 ## Examplary use-cases
 
@@ -63,10 +62,42 @@ It also makes it easy to re-combine the agents: just write multiple ones into th
 
 The ultimate capability that the separation of simulacra might enable is continual learning.
 
-An issue with continual learning is catastrophic forgetting. Teach the model new facts and it will forget old ones. However, I believe that this is at least in part due to LLMs being [Contextualization Machines](https://stochasm.blog/posts/contextualization-machines/).They produce outputs *conditional on the context*. If the context does not leave enough criterial with which to differentiate it from another context, then of course following it up with text B will lead the model to unlearn to complete this context with text A, even if it was previously trained to produce text A from the context.
+An issue with continual learning is catastrophic forgetting. Teach the model new facts and it will forget old ones. However, I believe that this is at least in part due to LLMs being [Contextualization Machines](https://stochasm.blog/posts/contextualization-machines/). They produce outputs *conditional on the context*. If the context does not leave enough criterial with which to differentiate it from another context, then of course following it up with text B will lead the model to unlearn to complete this context with text A, even if it was previously trained to produce text A from the context.
 
 Tags work around this issue by providing additional context which allows the model to retain the ability to express previously learned information *in the context in which it learned it*.
 
 Beside the obvious use-cases of continual learning, this might allow us to provide an agent with new information *in the weights* without overwriting its behavior, simply by training the information conditioned on different tags. This new information should be available to the agent. For example, we could train on a new paper, without the agent suddenly sounding like it wants to lecture you. In general, a model will contextualize new data better and thus be less likely to overwrite previous knowledge.
 
 As a sidenote, the same effects might make curriculum learning more effective. A `<date>...</data>` tag will help the model contextualize new information much better, and thus help it make connections between different pieces of information. This is of course true for any of the tags, but it's especially relevant here.
+
+## Why tags might be a bad idea
+
+Current LLMs are trained in an environment that is typically devoid of explicit context. But as prediction success is highly dependent on knowing the context you're in, LLMs are forced to become extremely good at [inferring the Logos](https://x.com/jd_pressman/status/1918419540788297856), a.k.a. understanding the process that lead to the generation of the text. Who wrote it? Why? On what platform or medium? When?
+
+Providing much of this context via tags might reduce the incentive for models to gain this intuition.
+
+And while it'd make explicit control of the models easier, it's possible that it would also reduce the ways in which LLMs could be steered in more subtle manners. Some companies would prefer that: it's a security boon, and makes it easier for companies to guardrail the models without the need for schizophrenic LLM whisperers, and increase reliability from the perspective of customers. On the other hand, it is also a capability that many will miss for legitimate reasons.
+
+The obvious solution to this dilemma is to leave out the tags completely for a decent percentage of the training data (10%? 20%?). This could actually improve the model's ability to infer context, because it has seen from what context different types of text are created, and if it guesses wrong, it will be updated strongly.
+
+Another option is to add the tags at the end of the text in some samples. Ignore the loss at the special-token tags so that the model doesn't learn to just randomly produce them (or just actively set their probability to 0 during inference, or both), and actively train the model to infer context.
+
+## Words of caution
+
+I have to stress again that this is all just speculation.
+
+It's possible that using tags would have all the advantages and disadvantages that I've discussed; it's possible that it only has the advantages, or only the disadvantages; it's possible that nothing in this article is correct, or that there would be almost no practical impact.
+
+I do believe that the concept is interesting enough to warrant experimentation though.
+
+## Citation
+
+```bibtex
+@misc{snimu2025tags,
+    title={\<Tags\> make them smart, \<Tags\> make them safe},
+    author={Sebastian Nicolas Müller},
+    year={2025},
+    month={04},
+    url={https://snimu.github.io/2025/05/03/tags-make-them-smart-tags-make-them-safe.html}
+}
+```
