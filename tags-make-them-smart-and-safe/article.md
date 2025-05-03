@@ -6,7 +6,7 @@ Pre-trained LLMs are simulators, but companies post-train them to be agents, whi
 
 These advantages generalize to many domains: safety, continual learning, character design, and more.
 
-To be clear, this is an extremely speculative post, and you should take everything I say with a big grain of salt; it's possible that it all just works; it's possible that it works a little bit, but not as much as I would hope; and it's possible that it doesn't work at all.
+To be clear, this is an extremely speculative post, and you should take everything I say with a big grain of salt. Additionally, I will phrase a lot my claims confidently and strongly, but even if the claims turn out to be directionally correct, effects may be small or nonexistent.
 
 ## What exactly do I mean by tags?
 
@@ -88,7 +88,7 @@ I have to stress again that this is all just speculation.
 
 It's possible that using tags would have all the advantages and disadvantages that I've discussed; it's possible that it only has the advantages, or only the disadvantages; it's possible that nothing in this article is correct, or that there would be almost no practical impact.
 
-I do believe that the concept is interesting enough to warrant experimentation though.
+Additionally, I do not believe that any of the effects I've described would apply 100%; instead, tags would at best be a decent step in the right direction.
 
 ## Citation
 
