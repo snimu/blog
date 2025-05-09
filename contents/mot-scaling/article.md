@@ -169,7 +169,7 @@ See code here...
 
 *fw*: validation loss on fineweb data;
 *fm*: validation loss on finemath data.
-Statistics calculated over last 100% of training data.
+Statistics calculated over last 100% of loss curve.
 
 | mixin   | mixout   |   D_model |   D_tok |   D_byte | # params   |   step time [s] |   mean fw |   mean fm |   std fw |   std fm |
 |:--------|:---------|----------:|--------:|---------:|:-----------|----------------:|----------:|----------:|---------:|---------:|
@@ -179,7 +179,7 @@ Statistics calculated over last 100% of training data.
 
 *fw*: validation loss on fineweb data;
 *fm*: validation loss on finemath data.
-Statistics calculated over last 50% of training data.
+Statistics calculated over last 50% of loss curve.
 
 | mixin   | mixout   |   D_model |   D_tok |   D_byte | # params   |   step time [s] |   mean fw |   mean fm |   std fw |   std fm |
 |:--------|:---------|----------:|--------:|---------:|:-----------|----------------:|----------:|----------:|---------:|---------:|
@@ -189,7 +189,7 @@ Statistics calculated over last 50% of training data.
 
 *fw*: validation loss on fineweb data;
 *fm*: validation loss on finemath data.
-Statistics calculated over last 10% of training data.
+Statistics calculated over last 10% of loss curve.
 
 | mixin   | mixout   |   D_model |   D_tok |   D_byte | # params   |   step time [s] |   mean fw |   mean fm |   std fw |   std fm |
 |:--------|:---------|----------:|--------:|---------:|:-----------|----------------:|----------:|----------:|---------:|---------:|
