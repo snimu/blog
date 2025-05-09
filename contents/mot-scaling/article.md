@@ -167,8 +167,8 @@ See code here...
 
 ## Results
 
-*fw*: validation loss on fineweb data
-*fm*: validation loss on finemath data
+*fw*: validation loss on fineweb data;
+*fm*: validation loss on finemath data.
 Calculated over last 100% of data
 
 | mixin   | mixout   |   D_model |   D_tok |   D_byte | # params   |   step time [s] |   mean fw |   mean fm |   std fw |   std fm |
@@ -177,8 +177,8 @@ Calculated over last 100% of data
 | concat  | noop     |      1024 |     512 |       64 | 430.4M     |          313.08 |      3.62 |      4.12 |     1.18 |     1.57 |
 | concat  | noop     |      1024 |     256 |       48 | 417M       |          309.60 |      3.61 |      4.08 |     1.17 |     1.49 |
 
-*fw*: validation loss on fineweb data
-*fm*: validation loss on finemath data
+*fw*: validation loss on fineweb data;
+*fm*: validation loss on finemath data.
 Calculated over last 50% of data
 
 | mixin   | mixout   |   D_model |   D_tok |   D_byte | # params   |   step time [s] |   mean fw |   mean fm |   std fw |   std fm |
@@ -187,8 +187,8 @@ Calculated over last 50% of data
 | concat  | noop     |      1024 |     512 |       64 | 430.4M     |          313.08 |      2.99 |      4.12 |     0.20 |     1.57 |
 | concat  | noop     |      1024 |     256 |       48 | 417M       |          309.60 |      3.06 |      4.08 |     0.22 |     1.49 |
 
-*fw*: validation loss on fineweb data
-*fm*: validation loss on finemath data
+*fw*: validation loss on fineweb data;
+*fm*: validation loss on finemath data.
 Calculated over last 10% of data
 
 | mixin   | mixout   |   D_model |   D_tok |   D_byte | # params   |   step time [s] |   mean fw |   mean fm |   std fw |   std fm |
