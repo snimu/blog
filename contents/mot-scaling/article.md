@@ -130,14 +130,14 @@ With the architecture out of the way, I can discuss why I believe each part is a
 
 ### Tokens vs. Bytes
 
-In my Tokens vs Bytes (LINK) article, I've named the following points in favor of tokens:
+In my [Tokens vs. Bytes(https://snimu.github.io/2025/03/07/tokens-vs-bytes.html)] article, I've named the following points in favor of tokens:
 
 - They reduce the sequence length
 - They capture statistics about the training dataset
 
 The former is obvious: a token is a group of bytes that often appear in human text in the given order, so we can reduce a whole group of bytes into a single token.
 
-The latter is also a consequence of the fact that tokens are ordered groups of bytes. During training, their embeddings are trained to contain a lot of semantically relevant information about the specific ordered group of bytes that they are made up of, which removes the necessity for the transformer to perform that work during inference. Basically, the gradients of the model do work during training that the model itself won't have to do a test time, which frees up model capacity. I've previously written that Tokens are in the middle of the model (LINK), and during training, that is true.
+The latter is also a consequence of the fact that tokens are ordered groups of bytes. During training, their embeddings are trained to contain a lot of semantically relevant information about the specific ordered group of bytes that they are made up of, which removes the necessity for the transformer to perform that work during inference. Basically, the gradients of the model do work during training that the model itself won't have to do a test time, which frees up model capacity. I've previously written that [Embeddings are in the middle of the model](https://snimu.github.io/2024/12/24/embeddings-are-in-the-middle-of-the-model.html), and during training, that is true.
 
 I've also listed the followind disadvantages of tokens:
 
@@ -145,11 +145,11 @@ I've also listed the followind disadvantages of tokens:
 - The might incentivize memorization
 - Undertrained tokens cause unpredictable behavior
 
-The first point seems obvious: there is no way to know what components a token is made up of except by seeing it somewhere else in training: either it's spelled out explicitly using different tokens, or the model learns it via induction from mis-spellings. But legibility is important for many capabilities: doing math without access to the digits a number is made up of (as is often the case with tokenizers that group digits into sets of three) is incredibly difficult and requires memorization of a lot of facts. It works much worse than doing math on bytes, as I've shown here (LINK).
+The first point seems obvious: there is no way to know what components a token is made up of except by seeing it somewhere else in training: either it's spelled out explicitly using different tokens, or the model learns it via induction from mis-spellings. But legibility is important for many capabilities: doing math without access to the digits a number is made up of (as is often the case with tokenizers that group digits into sets of three) is incredibly difficult and requires memorization of a lot of facts. It works much worse than doing math on bytes, as I've shown [here](https://snimu.github.io/2025/01/28/mixture-of-tokenizers-math.html).
 
 To compensate, models are forced to memorize. I believe that a model that relies heavily on memorization compared to generalization will carry this burden throughout training, and be more vulnerable to memorization in general. That's a big dose of speculation, though.
 
-The last point is again well known: if a token's embeddings are for some reason not trained well, they can cause strange behaviors during inference; see SolidGoldMagiCarp (LINK). This is, again, an issue with legibility: among 256 bytes (or 458 symbols), every single one is going to be used very often, so there are no undertrained embeddings, and thus the model will be able to make sense of tokens that, when used as tokens instead of as a byte sequence, are undertrained.
+The last point is again well known: if a token's embeddings are for some reason not trained well, they can cause strange behaviors during inference; see [SolidGoldMagikarp](https://www.lesswrong.com/posts/aPeJE8bSo6rAFoLqg/solidgoldmagikarp-plus-prompt-generation). This is, again, an issue with legibility: among 256 bytes (or 458 symbols), every single one is going to be used very often, so there are no undertrained embeddings, and thus the model will be able to make sense of tokens that, when used as tokens instead of as a byte sequence, are undertrained.
 
 ### Why mix tokens and bytes at the input?
 
@@ -159,11 +159,11 @@ When provided with both tokens and bytes at the input, the model can learn to ma
 
 *Adversarial robustness.*
 
-Another advantage of providing both tokens and bytes at the input is that it provides a multi-resolution input for text. This was my original motivation: In Ensemble Everything Everywhere (LINK), the authors show for CNNs that providing the same image at multiple resolutions to a model's input improves its adversarial robustness significantly.
+Another advantage of providing both tokens and bytes at the input is that it provides a multi-resolution input for text. This was my original motivation: In [Ensemble Everything Everywhere](https://arxiv.org/abs/2408.05446), the authors show for CNNs that providing the same image at multiple resolutions to a model's input improves its adversarial robustness significantly.
 
-The best explanation for why this works that I've come across are J.D. Pressman's (LINK) Logos (LINK) tweets, which basically say that data implies its own generation process, and this tweet (LINK) by him where he applies the framework to Ensemble Everything Everywhere by pointing out that a process that produces an image that looks like the real thing in multiple resolutions is likely to *be* the real thing, at least more likely than something that only has to be convincing at a single resolution. And important detail here is that CNNs focus strongly on the highest frequency parts of an image, and tend to neglect the low-frequenccy parts. In a high-resolution image, it will thus focus on very high-frequency parts, in a low-resolution image on low frequency parts. Therefore, even if the high-resolution image contains all the data in the low-resolution image and more, it is effectively the case that providing the image at multiple resolutions enables the model to see it more completely.
+The best explanation for why this works that I've come across are [J.D. Pressman](https://x.com/jd_pressman)'s [Logos tweets](https://x.com/jd_pressman/status/1918419540788297856), which basically say that data implies its own generation process, and [this tweet](https://x.com/jd_pressman/status/1856866399920295955?s=46) by him where he applies the framework to Ensemble Everything Everywhere by pointing out that a process that produces an image that looks like the real thing in multiple resolutions is likely to *be* the real thing, at least more likely than something that only has to be convincing at a single resolution. And important detail here is that CNNs focus strongly on the highest frequency parts of an image, and tend to neglect the low-frequenccy parts. In a high-resolution image, it will thus focus on very high-frequency parts, in a low-resolution image on low frequency parts. Therefore, even if the high-resolution image contains all the data in the low-resolution image and more, it is effectively the case that providing the image at multiple resolutions enables the model to see it more completely.
 
-Another perspective is that a multi-resolution image-input is similar to diffusion, which is spectral autoregression (LINK) (autoregression from low- to high-frequency parts of an image).
+Another perspective is that a multi-resolution image-input is similar to diffusion, [which is spectral autoregression](https://sander.ai/2024/09/02/spectral-autoregression.html) (autoregression from low- to high-frequency parts of an image).
 
 Combining tokens and bytes at the input will provide a similar effect, or at least I hope it does.
 
@@ -233,6 +233,6 @@ Pulling bytes at output -> multi-byte / multi-token prediction -> would be inter
 
 ### Finetuning token-based models with MoT
 
-See original MoT post (LINK)
+See [original MoT post](https://x.com/jd_pressman/status/1856866399920295955?s=46)
 
 ### Sampling trajectories from multi-byte predictions
