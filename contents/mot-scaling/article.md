@@ -10,13 +10,38 @@ I will give a proper motivation for every aspect of the architecture [below](#mo
 
 ### Tokens to Bytes
 
-How did I extract bytes from tokens?
+*How did I extract bytes from tokens?*
 
-- Constant bpt
-- Pad and cut off
-- Input: left-pad -> pull in
-- Output: right-pad -> pull out -> multi-byte (and effectively, multi-token prediction) -> see [sampling trajectories](#sampling-trajectories-from-multi-byte-predictions)
-- Model sequence length `T_model` is the token sequence length `T_token`, not the byte sequence length `T_byte`
+The trick for enabeling a mixing of tokens and bytes is to have a constant number of bytes per token (`bpt`). I achieve this by padding tokens with fewer bytes than my chosen `bpt` with a special padding byte, and cut off the last bytes of tokens with more than my chosen `bpt`.
+
+In my case, I chose `bpt=16`. The longest token in the GPT-2 tokenizer has 66 bytes, there is no relevant token longer than 21 bytes, and very few over 16 bytes. Since I had a much cruder method for mixing tokens and bytes back then, I chose the lowest number of `bpt` that I felt I could get away with. I was especially worried that if I chose the full 66 bytes per token, almost all byte sequences would consist almost exclusively of padding bytes (the average token has ~6 bytes) and I felt that that would reduce performance significantly. However, if I did it again, I would at least try to increase `bpt`, but I will come to that [later](#longer-byte-sequences).
+
+An important reason why I believe that more bytes per token wouldn't just give a more faithful representation of the tokens, but more general advantages, is that I also "pull the byptes".
+
+For bytes at the input, I put the padding bytes to the left of the bytes that make up the token ("left padding"). Then, at token position `i`, I pull in the bytes from the previous tokens, until all padding bytes are filled or there are no more tokens to pull from.
+
+At the output, I use right-padded byte sequences as targets (if I predict bytes instead of tokens), and pull bytes from future tokens.
+
+Here's an example of how that might look for `bpt=6`; ":" is short for a padding byte and "_" for a space. The bytes belonging to a single token are separated by a space.
+
+```cmd
+::::Hi :::::, :::_my :_name :::_is (Raw Inputs)
+
+:::::, _my::: _name: _is::: _snimu (Raw Targets)
+
+---
+
+::::Hi :::Hi, Hi,_my y_name ame_is (Pulled Inputs)
+
+,_my_n _my_na _name_ _is_sn _snimu (Pulled Targets)
+```
+
+While that looks confusing to humans, remember two things:
+
+1. In reality, `bpt=16` (and more in the future), so there is much more context per byte
+2. We're not training humans. What counts is the information content we give the model at the input, and the information content we make it predict in the targets
+
+I will go more deeply into the advantages of doing this [below](#pulling-bytes).
 
 **Caveat:** I didn't actually use bytes. Instead, I used a vocabulary of all *characters* that appear in the entire GPT-2 token vocabulary. Since UTF-8 is made up of up to 4 bytes, there are more characters than bits in a byte; 458 characters in the case of GPT-2 vs. 256 unique bytes. I did that because it was easier to implement, and the numbers aren't off by much so my results should transfer. In fact, I believe that the vast, overwhelming majority of characters that are actually used in training can be represented by a single byte without overlap (most multi-byte characters are rather rare), so the likelihood that the results transfer is even higher. And having a vocabulary size of 256 compared to 458 has additional advantages, as we will see later. Having mentioned that, I'm going to speak about bytes again from now on, for the sake of simplicity.
 
@@ -201,6 +226,14 @@ Statistics calculated over last 10% of loss curve.
 
 It's of course of interest to scale the models further and see how it goes, but my budget is limited so I want to focus on developing the technique itself further. I have two specific things in mind: finetuning existing, token-based models, and cheap decoding of multiple bytes at the output.
 
+### Longer byte sequences
+
+Pulling bytes at input -> longer sequences will only give more context (though in the first few bytes, there will still be plenty of padding, now more than ever).
+
+Pulling bytes at output -> multi-byte / multi-token prediction -> would be intereting to take this further (and at some point, reducing the loss weights for the far-out bytes is an option, too)
+
 ### Finetuning token-based models with MoT
+
+See original MoT post (LINK)
 
 ### Sampling trajectories from multi-byte predictions
