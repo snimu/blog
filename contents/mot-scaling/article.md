@@ -22,18 +22,22 @@ For bytes at the input, I put the padding bytes to the left of the bytes that ma
 
 At the output, I use right-padded byte sequences as targets (if I predict bytes instead of tokens), and pull bytes from future tokens.
 
-Here's an example of how that might look for `bpt=6`; ":" is short for a padding byte and "_" for a space. The bytes belonging to a single token are separated by a space.
+Here's an example of how that might look for `bpt=6`; ":" is short for a padding byte and "_" for a space. Each token (and the bytes belonging to a token) is marked by square brackets.
 
 ```cmd
-::::Hi :::::, :::_my :_name :::_is (Raw Inputs)
+RAW:
 
-:::::, _my::: _name: _is::: _snimu (Raw Targets)
+Input Tokens    |    [Hi]     [,]      [_my]    [_name]  [_is]
+Input Bytes     |    [::::Hi] [:::::,] [:::_my] [:_name] [:::_is]
+Target Bytes    |    [:::::,] [_my:::] [_name:] [_is:::] [_snimu]
 
 ---
 
-::::Hi :::Hi, Hi,_my y_name ame_is (Pulled Inputs)
+PULLED:
 
-,_my_n _my_na _name_ _is_sn _snimu (Pulled Targets)
+Input Tokens    |    [Hi]     [,]      [_my]    [_name]  [_is]
+Input Bytes     |    [::::Hi] [:::Hi,] [Hi,_my] [y_name] [ame_is]
+Target Bytes    |    [,_my_n] [_my_na] [_name_] [_is_sn] [_snimu]
 ```
 
 While that looks confusing to humans, remember two things:
@@ -171,20 +175,15 @@ My tentative view, formed from lots of very small experiments, thinking about th
 
 ### Pulling bytes
 
-- More context at input; contextualization machine
-- Multi-token prediction at output
-
-...
-
 *Pulling bytes from previous tokens at the input.*
 
-Pulling bytes from previous tokens provides redundancy and more context. I like the example given in Contextualization Machines (LINK), that a single token can quickly be turned into multiple tokens with a single mis-spelling. (PROVIDE CONCRETE EXAMPLE). With tokens, this pulls the model out of its learned distribution, but with pulled bytes, it will see the full word at the last of the three tokens, and be able to make the connection. In other words, pulling bytes can support an error correction algorithm.
+Pulling bytes from previous tokens provides redundancy and more context. I like the example given in [Contextualization Machines](https://stochasm.blog/posts/contextualization-machines/), that a single token can quickly be turned into multiple tokens with a single mis-spelling: "hello" is a single token, but "hwllp" is three: "hw", "ll", and "p". With tokens, this pulls the model out of its learned distribution, because there is less context directly at the input, and the model will have to re-construct that context during its forward pass. But with pulled bytes, it will see the full word at the last of the three tokens (plus more context), and be able to make the connection. In other words, pulling bytes can support an error correction algorithm.
 
 And the model should still learn which bytes belong to the token and which ones don't, because the bytes that belong to the token will be the same no matter what, but the pulled bytes will differ based on context.
 
 *Pulling bytes from future tokens at the targets.*
 
-Multi-token prediction...
+If the average token consists of 6 bytes (its a bit more in the GPT-2 tokenizer, and even more in other tokenizers, but it's approximately true), and we predict 16 bytes for each token, then we predict on average 2.6 tokens into the future. The [DeepSeek V3 Technical Report](https://arxiv.org/abs/2412.19437) showed clearly that multi-token prediction (MTP) is very adventageous. By pulling bytes, we can get this for free.
 
 ## Experiments
 
