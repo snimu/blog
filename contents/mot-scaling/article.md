@@ -118,6 +118,14 @@ Re-shape the output hidden states of the model from `B x T_model x D_model` into
 
 It's simple, and it has literally zero cost beside the cost of a re-shaping operation. Since we decode the output hidden states into only 256 (or 458) values, we have now almost completely removed the cost of the language head.
 
+#### Byte Mixout: Split and Copy
+
+This is purely speculation and I have not tested it, but it should obviously be possible to combine `split` and `copy`: just split the output latents `bpt / c` times, then copy each latent that was achieved this way `c` times.
+
+This might be useful if `bpt` is very high compared to `D_model`. If `bpt` is high, `copy` is expensive, because we get an output shape `B x (T * bpt) x D_model`. On the other hand, `split` gives the shape `B x (T * bpt) x (D_model / bpt)`, meaning that there as many elements in the output latents as with `noop` as the byte-mixout method. However, if `D_model` is small and `bpt` is high, this might lead to very small latents per byte that is decoded, and thus to a poor probability distribution over the bytes.
+
+A combination of both could be a good compromise.
+
 ### Byte Self-Attention
 
 I optionally apply self attention to the bytes at the in- and/or output. These are represented by `n_layer_in` and `n_layer_out` (which is 0 if it's not explicitely stated).
@@ -232,6 +240,19 @@ Clearly, the MoT achieves significantly better results than the token-baseline, 
 
 1. The mean loss over the last 10% of training is significantly lower in both fineweb and finemath. This is an obvious advantage
 2. The standard variation in the validation losses is much lower for the MoT than for the baseline. This indicates to me that the MoT is less prone to overfitting: a high standard deviation shows that that loss goes up and down rapidly. My main explanation for this effect is that the training data contains a bunch of sequences that are very similar to the validation data in one step, and the baseline overfits to that, decreasing the validation loss; then in the next batch, the sequences between the two are much more dissimilar, and the validation loss increases again. The MoT on the other hand shows much lower variation between the two scenarios, because it genralizes better. Note that I haven't explicitly tested this theory.
+
+Now, let's compare the losses between the two byte-mixout methods:
+
+*fw*: validation loss on fineweb data;
+*fm*: validation loss on finemath data.
+Statistics calculated over last 10% of loss curve.
+
+| mixin   | mixout   |   D_model |   D_tok |   D_byte |   # layers out | # params   |   step time [s] |   mean fw |   mean fm |   std fw |   std fm |
+|:--------|:---------|----------:|--------:|---------:|---------------:|:-----------|----------------:|----------:|----------:|---------:|---------:|
+| concat  | split    |      1024 |     256 |       48 |              0 | 365.5M     |          258.13 |      5.47 |      5.45 |     0.17 |     0.25 |
+| concat  | copy     |      1024 |     256 |       48 |              1 | 366M       |          262.88 |      6.06 |      5.57 |     0.35 |     0.50 |
+
+It seems like `split` is both cheaper and better than `copy`, which is nice.
 
 ## Future work
 
