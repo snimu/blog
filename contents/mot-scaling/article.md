@@ -187,11 +187,23 @@ If the average token consists of 6 bytes (its a bit more in the GPT-2 tokenizer,
 
 ## Experiments
 
-See code [here](https://github.com/snimu/mixture-of-tokenizers) under "scaled-pre-train".
+The code is [here](https://github.com/snimu/mixture-of-tokenizers) under "scaled-pre-train".
 
 ## Results
 
-### 10_000 steps (5B tokens)
+The validation losses between models that predict tokens and those that predict bytes aren't directly comparable. After all, CrossEntropyLoss depends on the sum over the exponentials of all predicted classes (tokens or bytes). If the number of predicted classes changes, then the losses aren't truly comparable anymore, and since there are far fewer bytes than tokens (by more than 100x), this issue applies to comparing `noop` and `split`/`copy` mixout methods.
+
+Therefore, whenever I'm comparing losses, I will be comparing different byte-mixin methods with `noop` as mixout, and different byte-mixout methods (that are not `noop`) using the same byte-mixin method to each other. I will compute the mean
+
+I will also present evaluation results. (TODO: do the actual evals).
+
+To save myself some money, I first ran a lot of experiments training for 1000 steps (~500M tokens), then fewer for 10,000 steps (~5B tokens), and, finally, the most promising experiments on 100,000 steps (~50B tokens).
+
+### 1000 steps (~500M tokens)
+
+(TODO: write down results)
+
+### 10,000 steps (~5B tokens)
 
 *fw*: validation loss on fineweb data;
 *fm*: validation loss on finemath data.
@@ -203,7 +215,9 @@ Statistics calculated over last 10% of loss curve.
 | concat  | noop     |      1024 |     512 |       64 | 430.4M     |          313.08 |      2.91 |      4.12 |     0.09 |     1.57 |
 | concat  | noop     |      1024 |     256 |       48 | 417M       |          309.60 |      2.93 |      4.08 |     0.09 |     1.49 |
 
-### 100_000 steps (50B tokens)
+### 100,000 steps (~50B tokens)
+
+Let's first compare the MoT with `concat` at the input to the token baseline:
 
 *fw*: validation loss on fineweb data;
 *fm*: validation loss on finemath data.
@@ -214,18 +228,29 @@ Statistics calculated over last 10% of loss curve.
 | noop    | noop     |      1024 |    1024 |     1024 | 454.5M     |          300.95 |      5.46 |      5.66 |     0.19 |     0.66 |
 | concat  | noop     |      1024 |     256 |       48 | 417M       |          296.07 |      4.21 |      4.82 |     0.06 |     0.80 |
 
+Clearly, the MoT achieves significantly better results than the token-baseline, and does so with fewer parameters and a lower per-step time, in two ways:
+
+1. The mean loss over the last 10% of training is significantly lower in both fineweb and finemath. This is an obvious advantage
+2. The standard variation in the validation losses is much lower for the MoT than for the baseline. This indicates to me that the MoT is less prone to overfitting: a high standard deviation shows that that loss goes up and down rapidly. My main explanation for this effect is that the training data contains a bunch of sequences that are very similar to the validation data in one step, and the baseline overfits to that, decreasing the validation loss; then in the next batch, the sequences between the two are much more dissimilar, and the validation loss increases again. The MoT on the other hand shows much lower variation between the two scenarios, because it genralizes better. Note that I haven't explicitly tested this theory.
+
 ## Future work
 
-It's of course of interest to scale the models further and see how it goes, but my budget is limited so I want to focus on developing the technique itself further. I have two specific things in mind: finetuning existing, token-based models, and cheap decoding of multiple bytes at the output.
-
-### Longer byte sequences
-
-Pulling bytes at input -> longer sequences will only give more context (though in the first few bytes, there will still be plenty of padding, now more than ever).
-
-Pulling bytes at output -> multi-byte / multi-token prediction -> would be intereting to take this further (and at some point, reducing the loss weights for the far-out bytes is an option, too)
+It's of course of interest to scale the models further and see how it goes, but my budget is limited so I want to focus on developing the technique itself further. I have two specific things in mind: finetuning existing, token-based models, and cheap decoding of multiple bytes at the output. Additionally, I think that testing higher `bpt` would be worthwhile, as would comparing to a more modern tokenizer such as Qwen's.
 
 ### Finetuning token-based models with MoT
 
 See [original MoT post](https://x.com/jd_pressman/status/1856866399920295955?s=46)
 
 ### Sampling trajectories from multi-byte predictions
+
+### Comparing to a more modern tokenizer
+
+The great advantage that the MoT seems to have over the baseline in math performance is likely in large part an effect of the GPT-2 tokenizer, which tokenizes numbers in groups of up to three digits per token, which is algorithmically disadvantageous. More modern tokenizers like the one by Qwen often keep every single digit as its own token, which likely negates that MoT advantage. However, all the other advantages of the MoT that I've listed above should still apply (and I have collected them in [this tweet](https://x.com/omouamoua/status/1921906477154840749), if you're interested).
+
+If time- and money-related constraints allow for it, I will test this out.
+
+### Longer byte sequences
+
+Pulling bytes at input -> longer sequences will only give more context (though in the first few bytes, there will still be plenty of padding, now more than ever).
+
+Pulling bytes at output -> multi-byte / multi-token prediction -> would be intereting to take this further (and at some point, reducing the loss weights for the far-out bytes is an option, too)
