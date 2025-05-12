@@ -166,7 +166,7 @@ With the architecture out of the way, I can discuss why I believe each part is a
 
 ### Tokens vs. Bytes
 
-In my [Tokens vs. Bytes(https://snimu.github.io/2025/03/07/tokens-vs-bytes.html)] article, I've named the following points in favor of tokens:
+In my [Tokens vs. Bytes](https://snimu.github.io/2025/03/07/tokens-vs-bytes.html) article, I've named the following points in favor of tokens:
 
 - They reduce the sequence length
 - They capture statistics about the training dataset
