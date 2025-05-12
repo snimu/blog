@@ -4,7 +4,35 @@ The Mixture of Tokenizers (MoT) is an idea for combining different tokenizers.
 
 In this case&mdash;the simplest but most important one&mdash;it is about mixing bytes and tokens at the input, and predicting bytes *or* tokens at the output. The aim is to combine the advantages of tokens and bytes, and results are looking promising.
 
-I will give a proper motivation for every aspect of the architecture [below](#motivation). But first, I will explain the different components of the architecture and the choices that can be made for each, because otherwise, the motivation wouldn't make any sense.
+I will give a proper motivation for every aspect of the architecture [below](#motivation). But first, I will explain the different components of the architecture and the choices that can be made for each, because otherwise, the motivation wouldn't make any sense. Then, I will present the highly promising [results](#results), and finish with [future work](#future-work).
+
+Table of Contents:
+
+- [**Architecture**](#architecture)
+  - [*Tokens to Bytes*](#tokens-to-bytes)
+  - [*Byte Mixin*](#byte-mixin)
+    - [Byte Mixin: Concat](#byte-mixin-concat)
+    - [Byte Mixin: Cross Attention](#byte-mixin-cross-attention)
+  - [*Byte Mixout*](#byte-mixout)
+    - [Byte Mixout: Copy](#byte-mixout-copy)
+    - [Byte Mixout: Split](#byte-mixout-split)
+    - [Byte Mixout: Split and Copy](#byte-mixout-split-and-copy)
+  - [*Byte Self-Attention*](#byte-self-attention)
+- [**Motivation**](#motivation)
+  - [*Tokens vs. Bytes*](#tokens-vs-bytes)
+  - [*Why mix tokens and bytes at the input?*](#why-mix-tokens-and-bytes-at-the-input)
+  - [*Why predict bytes at the output?*](#why-predict-bytes-at-the-output)
+  - [*Pulling bytes*](#pulling-bytes)
+- [**Experiments**](#experiments)
+- [**Results**](#results)
+  - [*1000 steps (~500M tokens)*](#1000-steps-500m-tokens)
+  - [*10,000 steps (~5B tokens)*](#10000-steps-5b-tokens)
+  - [*100,000 steps (~50B tokens)*](#100000-steps-50b-tokens)
+- [**Future Work**](#future-work)
+  - [*Finetuning token-based models with MoT*](#finetuning-token-based-models-with-mot)
+  - [*Sampling trajectories from multi-byte predictions*](#sampling-trajectories-from-multi-byte-predictions)
+  - [*Comparing to a more modern tokenizer*](#comparing-to-a-more-modern-tokenizer)
+  - [*Longer byte sequences*](#longer-byte-sequences)
 
 ## Architecture
 
