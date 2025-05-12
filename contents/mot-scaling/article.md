@@ -187,29 +187,11 @@ If the average token consists of 6 bytes (its a bit more in the GPT-2 tokenizer,
 
 ## Experiments
 
-See code here...
+See code [here](https://github.com/snimu/mixture-of-tokenizers) under "scaled-pre-train".
 
 ## Results
 
-*fw*: validation loss on fineweb data;
-*fm*: validation loss on finemath data.
-Statistics calculated over last 100% of loss curve.
-
-| mixin   | mixout   |   D_model |   D_tok |   D_byte | # params   |   step time [s] |   mean fw |   mean fm |   std fw |   std fm |
-|:--------|:---------|----------:|--------:|---------:|:-----------|----------------:|----------:|----------:|---------:|---------:|
-| noop    | noop     |      1024 |    1024 |     1024 | 454.5M     |          312.11 |      3.64 |      4.22 |     1.19 |     1.60 |
-| concat  | noop     |      1024 |     512 |       64 | 430.4M     |          313.08 |      3.62 |      4.12 |     1.18 |     1.57 |
-| concat  | noop     |      1024 |     256 |       48 | 417M       |          309.60 |      3.61 |      4.08 |     1.17 |     1.49 |
-
-*fw*: validation loss on fineweb data;
-*fm*: validation loss on finemath data.
-Statistics calculated over last 50% of loss curve.
-
-| mixin   | mixout   |   D_model |   D_tok |   D_byte | # params   |   step time [s] |   mean fw |   mean fm |   std fw |   std fm |
-|:--------|:---------|----------:|--------:|---------:|:-----------|----------------:|----------:|----------:|---------:|---------:|
-| noop    | noop     |      1024 |    1024 |     1024 | 454.5M     |          312.11 |      3.11 |      4.22 |     0.38 |     1.60 |
-| concat  | noop     |      1024 |     512 |       64 | 430.4M     |          313.08 |      2.99 |      4.12 |     0.20 |     1.57 |
-| concat  | noop     |      1024 |     256 |       48 | 417M       |          309.60 |      3.06 |      4.08 |     0.22 |     1.49 |
+### 10_000 steps (5B tokens)
 
 *fw*: validation loss on fineweb data;
 *fm*: validation loss on finemath data.
@@ -220,6 +202,17 @@ Statistics calculated over last 10% of loss curve.
 | noop    | noop     |      1024 |    1024 |     1024 | 454.5M     |          312.11 |      3.00 |      4.22 |     0.19 |     1.60 |
 | concat  | noop     |      1024 |     512 |       64 | 430.4M     |          313.08 |      2.91 |      4.12 |     0.09 |     1.57 |
 | concat  | noop     |      1024 |     256 |       48 | 417M       |          309.60 |      2.93 |      4.08 |     0.09 |     1.49 |
+
+### 100_000 steps (50B tokens)
+
+*fw*: validation loss on fineweb data;
+*fm*: validation loss on finemath data.
+Statistics calculated over last 10% of loss curve.
+
+| mixin   | mixout   |   D_model |   D_tok |   D_byte | # params   |   step time [s] |   mean fw |   mean fm |   std fw |   std fm |
+|:--------|:---------|----------:|--------:|---------:|:-----------|----------------:|----------:|----------:|---------:|---------:|
+| noop    | noop     |      1024 |    1024 |     1024 | 454.5M     |          300.95 |      5.46 |      5.66 |     0.19 |     0.66 |
+| concat  | noop     |      1024 |     256 |       48 | 417M       |          296.07 |      4.21 |      4.82 |     0.06 |     0.80 |
 
 ## Future work
 
