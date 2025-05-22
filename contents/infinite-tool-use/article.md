@@ -4,8 +4,6 @@ An LLM should never output anything but tool calls and their arguments.
 
 The tools hold the specific, instantiated state of what the model is doing and its goals, while the model itself holds an abstract representation of that state and the goals as well as the little bit of instantiated data it currently needs, leading to specialization between the LLM and its tools. In other words, exclusively working through tools allows models to externalize large parts of their intelligence to more efficient, domain-specific programs.
 
-It also alleviates the need for LLMs to have perfect access to the full context, making SSMs an attractive option. And those, in turn, would allow for *infinite tool use*: extremely long-context interactions mediated exclusively through tool calls.
-
 Table of contents:
 
 - [Examples](#examples)
@@ -49,7 +47,7 @@ Additionally, the use of SSMs in this context would enable the following:
 
 And the potential issue of going off-course if solved by simply refreshing the model's memory about fine-grained details (specific sections, sentences, words, what the goal of the whole process is, ...) through tool-use.
 
-To be clear, this wouldn't prevent the model from generating easy answers in forward-only mode, by doing the equivalent of typing out a quick response and immediately clicking "send".
+To be clear, this wouldn't prevent the model from generating easy answers in forward-only mode. If the LLM wants to directly answer a user without going through an editing process, they can do the equivalent of typing out a quick response and immediately clicking "send" within the tool.
 
 ### 3D Generation
 
@@ -61,6 +59,7 @@ So what would a similar tool look like for 3D generation? CAD libraries exist fo
   - Zoom in and out
   - Rotate the object
   - Shift the object
+  - And, obviously, look at the resulting 2D projection of the 3D object
 - A way to think about the object
   - This could just be another text-file as discussed in the [Text editing](#text-editing) section for taking notes
   - The model's context window itself (most thoughts should not be persistent, and the ones that should be can be written down in the note-taking-file)
@@ -76,15 +75,15 @@ This would bring the following advantages:
 
 ### Video Understanding
 
-A full-attention LLM is un-usable for days-long videos because it's way too inefficient. A pure SSM is un-usable for the task because it cannot attend to enough of the video. But an SSM *with tools* can re-watch whatever part of the video it needs to understand what it has to, write down, edit, and revisit running notes, and more, without exploding costs. This makes it the obvious choice.
+A full-attention LLM is un-usable for days-long videos because it's way too inefficient. A pure SSM is un-usable for the task because it cannot attend to enough of the video. But any LLM with a finite context window but *with tools* (and training to use them) can re-watch whatever part of the video it needs to understand what it has to, write down, edit, and revisit running notes, and more, without exploding costs. This makes it the obvious choice.
 
 ## AI Safety
 
 Seeing the full editing process (with version control, potentially available to the LLM as well) is bound to be fascinating. More importantly, it has safety advantages.
 
-This can be seen by analogy to current reasoners (which are complementary to the infinite tool use paradigm, but also a proto-version of it): If the task is hard, the model must make maximum use of the tools at its deposal, which include the CoT. Since deception adds additional complexity to the CoT, it further complicates the model's work, so if its capabilities are saturated, it will communicate as clearly as possible to itself within the CoT.
+This can be seen by analogy to current reasoners (which are complementary to the infinite tool use paradigm, but also a proto-version of it): If the task is hard, the model must make maximum use of the tools at its diposal, which include the CoT. Since deception adds additional complexity to the CoT, it further complicates the model's work, so if its capabilities are saturated, it will communicate as clearly as possible to itself within the CoT.
 
-The same is true for SSMs with infinite tool use: when trained on sufficiently difficult tasks, they must use the tools at their disposal with clarity and good structure. This is especially true for SSMs, which do not have perfect access to the full context and must thus rely on their tools even more strongly.
+The same is true for LLMs with infinite tool use: when trained on sufficiently difficult tasks, they must use the tools at their disposal with clarity and good structure. Therefore, training them on sufficiently difficult tasks with infinite tool use will likely make their outputs more faithful and more legible.
 
 ## Thoughts on Training
 
@@ -96,17 +95,23 @@ The obvious solution is to just scale RL. A few other data-sources might be avai
 - The same is true for something like Google Docs, which have an edit history.
 - For 3D generation, I imagine such data to be much harder to come by, so a stronger focus on RL is required.
 
-However, using SSMs and interacting only through tools means that there is likely no need to actively train for infinite context length, as we train to recover from mistakes & edit from many different starting points. And that is my main takeaway: SSMs being forgetful means that just training fairly long context windows from diverse start and end points will probably generalize to infinite context windows.
+However, using LLMs with a limited context window and interacting only through tools means that there is likely no need to actively train for infinite context length, if we train to recover from mistakes & edit from many different starting points. And that is my main takeaway: LLMs with limited context window (SSMs, sliding window attention, ...) being forgetful means that just training fairly long context windows from diverse start and end points will probably generalize to infinite context windows.
 
 ## Thoughts on Architecture
 
-For architecture, I'm open to all possibilities; [RWKV](https://www.rwkv.com/), [Mamba](https://arxiv.org/abs/2312.00752), [xLSTM](https://arxiv.org/abs/2405.04517), [Titans](https://arxiv.org/abs/2501.00663), [Test-Time-Training](https://arxiv.org/abs/2407.04620), etc. I'm also open to using hybrid employing sliding-window self-attention with a really large sliding window (100k tokens or whatever you can take) every few layers to give the model high-resolution access to the immediate context, though then we really have to train on context lengths much longer than the sliding window to train the model to make proper use of the SSMs.
+For architecture, I'm open to all possibilities; [RWKV](https://www.rwkv.com/), [Mamba](https://arxiv.org/abs/2312.00752), [xLSTM](https://arxiv.org/abs/2405.04517), [Titans](https://arxiv.org/abs/2501.00663), [Test-Time-Training](https://arxiv.org/abs/2407.04620), simple attention with a sliding window.
 
-I say this to stress that the important point is a constant inference budget per token independent of context window size (or at least one that is limited as in sliding window attention).
+I'm also open to using hybrids. One version that might make sense for infinite tool use is the inverse or normal hybrids (though I'm also open to those). Normal hybrids typically use a few SSM layers followed by a full (causal) Attention layer (often without positional information). For infinite tool use, it might (might!) make more sense to reverse that: several layers of sliding window attention for a high-precision but localized view of the sequence, followed by an SSM layer that provides a much more abstracted but longer range view of the input. To be clear, I'm not at all sure about this, and this paragraph exists mostly for the fun of speculation,
+
+This section is mostly meant to stress the importance of a constant inference budget per token independent of context window size (or at least one that is limited as in sliding window attention).
 
 ## Conclusion
 
-The tool-use paradigm is in full swing already&mdash;o3 by OpenAI, agentic RAG models by Pleias, etc.&mdash;but still limited to very short contexts, and to only parts of the model output. I propose performing all interaction with the external world, be that users, a computer, or another LLM, through tool-use, and to scale that tool-use to ever-longer contexts, which would necessitate models that are linear in complexity over the sequence length.
+The tool-use paradigm is in full swing already&mdash;o3 by OpenAI, agentic RAG models by Pleias, etc.&mdash;but still limited to very short contexts, and to only parts of the model output. I propose performing all interaction with the external world, be that users, a computer, or another LLM, through tool-use, and to scale that tool-use to ever-longer contexts using models that trade imperfect recall of the entire sequence (sliding window attention, SSMs, ...) for constant (or upper-limited) per-step cost.
+
+## Acknowledgements
+
+Thanks to [stochasm](https://x.com/stochasticchasm) for proof-reading the article and for fruitful discussions.
 
 ## Citation
 
