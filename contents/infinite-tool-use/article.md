@@ -117,6 +117,6 @@ Thanks to [stochasm](https://x.com/stochasticchasm) for proof-reading the articl
     author={Sebastian Nicolas Müller},
     year={2025},
     month={04},
-    url={https://snimu.github.io/2025/04/28/infinite-tool-use.html}
+    url={https://snimu.github.io/2025/05/22/infinite-tool-use.html}
 }
 ```
