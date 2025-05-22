@@ -89,13 +89,9 @@ The same is true for LLMs with infinite tool use: when trained on sufficiently d
 
 Obviously good training data is needed. The challenge is that infinite tool-use requires truly agentic behavior: Understanding goals in detail, choosing tools, spotting and correcting mistakes, and so on.
 
-The obvious solution is to just scale RL. A few other data-sources might be available, too:
+The obvious solution is to just scale RL. This might seem difficult to impossible to do with unlimited context length.
 
-- For code, GitHub is great. We can turn the current state of the code-base, and an issue, all the commits leading to a PR being merged, and the PR itself&mdash;all in the order in which they were created&mdash;into a single sequence and pre-train on it. This would still not fully emulate infinite tool-use, because it doesn't include calls to load pieces of code for review into the context, and similar issues. It's also often missing discussions that happen outside of the issues and PRs. But it's a good starting point.
-- The same is true for something like Google Docs, which have an edit history.
-- For 3D generation, I imagine such data to be much harder to come by, so a stronger focus on RL is required.
-
-However, using LLMs with a limited context window and interacting only through tools means that there is likely no need to actively train for infinite context length, if we train to recover from mistakes & edit from many different starting points. And that is my main takeaway: LLMs with limited context window (SSMs, sliding window attention, ...) being forgetful means that just training fairly long context windows from diverse start and end points will probably generalize to infinite context windows.
+However, using LLMs with a limited context window and interacting only through tools means that there is likely no need to actively train for infinite context length, if we train to recover from mistakes & edit from many different starting points. LLMs with limited context window (SSMs, sliding window attention, ...) being forgetful means that just training fairly long context windows from diverse start and end points will probably generalize to infinite context windows.
 
 ## Thoughts on Architecture
 
