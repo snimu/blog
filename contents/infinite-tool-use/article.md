@@ -27,29 +27,25 @@ Here's how I wrote this article *so far*: I had an idea and wrote it down in a f
 
 Now contrast that with the way an LLM currently writes: It generates text forward-only. (Almost) no matter how good it is, it will make mistakes, especially in out-of-distribution (OOD) domains.
 
-And while we can train it to backtrack and correct those mistakes in the form of **reasoners**, the mistakes themselves are baked into its output, and thus into both its own context window and the user answer. The latter is a problem because it makes it hard to produce long, correct outputs, the former because it is confusing to the model itself if the output gets very long.
-
-Additionally, forward-only generation makes **multi-resolution generation** much more difficult: I as a human can create hundreds of versions of the same article; edit a sentence here and there, write down an idea as a bulletpoint, delete something dumb, turn a bulletpoint into a full section, etc.; in other words, I can interleave actions at different levels of specificity. Imagine how confusing it would be to hold all those edits in memory at once!
+Forward-only generation makes **multi-resolution generation** much more difficult: I as a human can create hundreds of versions of the same article; edit a sentence here and there, write down an idea as a bulletpoint, delete something dumb, turn a bulletpoint into a full section, etc.; in other words, I can interleave actions at different levels of specificity. Imagine how confusing it would be to hold all those edits in memory at once!
 
 Editing through external tools allows for explicit, selective forgetting. LLMs on the other hand either need to generate from most general to most specific in order&mdash;a very limiting way of multi-scale generation compared to tool-use&mdash;or generate a confusing mess of edits and re-edits and deletions that aren't true deletions; or re-generate the entire output for every single edit; or just generate the final version all at once.
+
+And while we can train an LLM to backtrack and correct mistakes in the form of **reasoning RL**, the mistakes themselves are baked into its output, and thus into both its own context window and the user answer. The latter is a problem because it makes it hard to produce long, correct outputs, the former because it is confusing to the model itself if the output gets very long.
+
+Additionally, the Chain of Thought (CoT) of reasoners doesn't address the problem of mistakes in the final answer, even if the CoT contains all the information necessary to produce a great final output, simply because no model is ideal, and sampling errors still happen. Of course, we can interleave CoT and user-output; but then we still commit to part of the final output early.
+
+> To be clear, reasoner RL is a great thing which is highly compatible with and even required for infinite tool use and will go a long way on its own, but infinite tool use can still add to it. In a sense, it's the logical conclusion of what a lot of companies are currently working towards.
 
 More generally, **extremely long contexts** are difficult to manage for LLMs, but might be required for very complex tasks.
 
 Methods like [Entropix](https://github.com/xjdr-alt/entropix) try to work around these issues by dynamically adapting token-sampling parameters like temperature, by branching and merging on demand, and even backtracking, all based on an external measurement of the model's entropy. Good sampling strategies will be valuable no matter what, but leaving the editing decisions to the model itself is likely a more scalable approach, as demonstrated to a degree by current reasoners.
-
-Speaking of reasoners, Chain of Thought (CoT), often trained via Reinforcement Learning (RL), is a different approach for allowing the models to fix these issues, but it doesn't address the problem of mistakes in the final answer, even if the CoT contains all the information necessary to produce a great final output. Of course, we can interleave CoT and user-output; but then we still commit to part of the final output early.
 
 The final (and correct) step of this evolution is to simply allow the model to continually improve the final answer *before* dumping it on the user. Give it access to a full text-editor that is controllable through special text-commands, and see many benefits:
 
 - Multi-abstraction-scale text generation
 - Effortlessly interleaving those abstraction levels
 - Backtracking via editing
-
-Additionally, the use of SSMs in this context would enable the following:
-
-- Extremely long edit and re-edit sessions without exploding costs
-- Selective forgetting of obsolete information over the course of editing
-- Immediate availability of the most up-to-date version of the desired output.
 
 And the potential issue of going off-course if solved by simply refreshing the model's memory about fine-grained details (specific sections, sentences, words, what the goal of the whole process is, ...) through tool-use.
 
@@ -93,19 +89,21 @@ The same is true for LLMs with infinite tool use: when trained on sufficiently d
 
 ## Thoughts on Training
 
-Obviously good training data is needed. The challenge is that infinite tool-use requires truly agentic behavior: Understanding goals in detail, choosing tools, spotting and correcting mistakes, and so on.
+The main method of training an LLM with infinite tool use is through reinfocement learning. One difficulty in this might be the question of how to train over infinite (or at least unbounded) context length.
 
-The obvious solution is to just scale RL. This might seem difficult to impossible to do with unlimited context length.
-
-However, using LLMs with a limited context window and interacting only through tools means that there is likely no need to actively train for infinite context length, if we train to recover from mistakes & edit from many different starting points. LLMs with limited context window (SSMs, sliding window attention, ...) being forgetful means that just training fairly long context windows from diverse start and end points will probably generalize to infinite context windows.
+However, using LLMs with a limited context window and interacting only through tools means that there is likely no need to actively train for infinite context length, if we train to recover from mistakes & edit from many different starting points. LLMs with limited context window (SSMs, sliding window attention, ...) being forgetful means that just training fairly long context windows from diverse start and end points will probably generalize to infinite context windows. However, this is one of the biggest questionmarks in this very speculative proposal.
 
 ## Thoughts on Architecture
 
-For architecture, I'm open to all possibilities; [RWKV](https://www.rwkv.com/), [Mamba](https://arxiv.org/abs/2312.00752), [xLSTM](https://arxiv.org/abs/2405.04517), [Titans](https://arxiv.org/abs/2501.00663), [Test-Time-Training](https://arxiv.org/abs/2407.04620), simple attention with a sliding window.
+For architecture, I'm open to all possibilities; [RWKV](https://www.rwkv.com/), [Mamba](https://arxiv.org/abs/2312.00752), [xLSTM](https://arxiv.org/abs/2405.04517), [Titans](https://arxiv.org/abs/2501.00663), [Test-Time-Training](https://arxiv.org/abs/2407.04620), simple attention with a sliding window, whatever.
 
-I'm also open to using hybrids. One version that might make sense for infinite tool use is the inverse or normal hybrids (though I'm also open to those). Normal hybrids typically use a few SSM layers followed by a full (causal) Attention layer (often without positional information). For infinite tool use, it might (might!) make more sense to reverse that: several layers of sliding window attention for a high-precision but localized view of the sequence, followed by an SSM layer that provides a much more abstracted but longer range view of the input. To be clear, I'm not at all sure about this, and this paragraph exists mostly for the fun of speculation,
+I'm also open to using hybrids. One version that might make sense for infinite tool use is the inverse or normal hybrids (though I'm also open to those). Normal hybrids typically use a few SSM layers followed by a full (causal) Attention layer (often without positional information). For infinite tool use, it might make more sense to reverse that: several layers of sliding window attention for a high-precision but localized view of the sequence, followed by an SSM layer that provides a much more abstracted but longer range view of the input. But that's just fun speculation, nothing I'm remotely sure about.
 
-This section is mostly meant to stress the importance of a constant inference budget per token independent of context window size (or at least one that is limited as in sliding window attention).
+The main point of this section is to stress the importance of a constant inference budget per token independent of context window size (or at least one that is limited as in sliding window attention), and the usefulness of forgettfulness combined with tools.
+
+A constant or upper-bounded per-step inference budget is obviously important for *infinite* tool use.
+
+Forgetfulness&mdash;which goes hand in hand with a constant/upper-bounded per-step budget&mdash; is important because it allows for specialization between the model and its tools. Saving a billion tokens in a text file is significantly cheaper than a billion token full-attention context window.
 
 ## Conclusion
 
