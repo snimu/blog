@@ -4,7 +4,7 @@ An LLM should never output anything but tool calls and their arguments.
 
 The tools hold the specific, instantiated state of what the model is doing and its goals, while the model itself holds only the information it requires for its immediate task and some additional context, leading to specialization between the LLM and its tools.
 
-In other words, exclusively working through tools allows models to externalize large parts of their intelligence to more efficient, domain-specific programs.
+Exclusively working through tools allows models to externalize large parts of their intelligence to more efficient, domain-specific programs.
 
 Table of contents:
 
@@ -31,23 +31,23 @@ Forward-only generation makes **multi-resolution generation** much more difficul
 
 Editing through external tools allows for explicit, selective forgetting. LLMs on the other hand either need to generate from most general to most specific in order&mdash;a very limiting way of multi-scale generation compared to tool-use&mdash;or generate a confusing mess of edits and re-edits and deletions that aren't true deletions; or re-generate the entire output for every single edit; or just generate the final version all at once.
 
-And while we can train an LLM to backtrack and correct mistakes in the form of **reasoning RL**, the mistakes themselves are baked into its output, and thus into both its own context window and the user answer. The latter is a problem because it makes it hard to produce long, correct outputs, the former because it is confusing to the model itself if the output gets very long.
+And while we can train an LLM to backtrack and correct mistakes in the form of **reasoning RL**, the mistakes themselves are baked into its output, and thus into both its own context window and the user answer. The latter is a problem because it makes it hard to produce long, correct outputs, the former because it is confusing to the model itself, at least if the output gets very long.
 
 Additionally, the Chain of Thought (CoT) of reasoners doesn't address the problem of mistakes in the final answer, even if the CoT contains all the information necessary to produce a great final output, simply because no model is ideal, and sampling errors still happen. Of course, we can interleave CoT and user-output; but then we still commit to part of the final output early.
 
-> To be clear, reasoner RL is a great thing which is highly compatible with and even required for infinite tool use and will go a long way on its own, but infinite tool use can still add to it. In a sense, it's the logical conclusion of what a lot of companies are currently working towards.
+> To be clear, reasoner RL is a great thing which is highly compatible with and even required for infinite tool use and will go a long way on its own, and the failings described above are minor ones, but I nevertheless believe that infinite tool use can improve the framework significantly. In a sense, it's the logical conclusion of what a lot of companies are currently working towards.
 
 More generally, **extremely long contexts** are difficult to manage for LLMs, but might be required for very complex tasks.
 
-Methods like [Entropix](https://github.com/xjdr-alt/entropix) try to work around these issues by dynamically adapting token-sampling parameters like temperature, by branching and merging on demand, and even backtracking, all based on an external measurement of the model's entropy. Good sampling strategies will be valuable no matter what, but leaving the editing decisions to the model itself is likely a more scalable approach, as demonstrated to a degree by current reasoners.
+Methods like [**Entropix**](https://github.com/xjdr-alt/entropix) try to work around these issues by dynamically adapting token-sampling parameters like temperature, by branching and merging on demand, and even backtracking, all based on an external measurement of the model's entropy. Good sampling strategies will be valuable no matter what, but leaving the editing decisions to the model itself is likely a more scalable approach, as demonstrated to a degree by current reasoners.
 
-The final (and correct) step of this evolution is to simply allow the model to continually improve the final answer *before* dumping it on the user. Give it access to a full text-editor that is controllable through special text-commands, and see many benefits:
+The final (and correct) step of this evolution is to simply allow the model to continually improve the final answer *before* dumping it on the user. Give it access to a **full text-editor** that is controllable through special text-commands, and see many benefits:
 
 - Multi-abstraction-scale text generation
 - Effortlessly interleaving those abstraction levels
 - Backtracking via editing
 
-And the potential issue of going off-course if solved by simply refreshing the model's memory about fine-grained details (specific sections, sentences, words, what the goal of the whole process is, ...) through tool-use.
+And the potential issue of going off-course is solved by simply refreshing the model's memory about fine-grained details (specific sections, sentences, words, what the goal of the whole process is, ...) through tool-use.
 
 To be clear, this wouldn't prevent the model from generating easy answers in forward-only mode. If the LLM wants to directly answer a user without going through an editing process, they can do the equivalent of typing out a quick response and immediately clicking "send" within the tool.
 
