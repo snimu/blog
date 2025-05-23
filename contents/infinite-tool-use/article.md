@@ -2,7 +2,9 @@
 
 An LLM should never output anything but tool calls and their arguments.
 
-The tools hold the specific, instantiated state of what the model is doing and its goals, while the model itself holds an abstract representation of that state and the goals as well as the little bit of instantiated data it currently needs, leading to specialization between the LLM and its tools. In other words, exclusively working through tools allows models to externalize large parts of their intelligence to more efficient, domain-specific programs.
+The tools hold the specific, instantiated state of what the model is doing and its goals, while the model itself holds only the information it requires for its immediate task and some additional context, leading to specialization between the LLM and its tools.
+
+In other words, exclusively working through tools allows models to externalize large parts of their intelligence to more efficient, domain-specific programs.
 
 Table of contents:
 
@@ -21,13 +23,17 @@ The benefits of infinite tool use are best understood via examples.
 
 ### Text Editing
 
-Here's how I wrote this article *so far*: I had an idea and wrote it down in a few bullet points. Then, I wrote the introduction. While doing that, I jumped to the end of the article, added a few more bullet points, and edited others. I started writing this section, interrupted it by writing down an idea about the architecture of such models, then came back here; realized that I should re-write this section, started doing that, edited the introduction to fit, went back to the re-write, and here we are. I'm not even half-way done with the article and I'm sure I already forgot a bunch of steps that I took.
+Here's how I wrote this article *so far*: I had an idea and wrote it down in a few bullet points. Then, I wrote the introduction. While doing that, I jumped to the end of the article, added a few more bullet points, and edited others. I started writing this section, interrupted it by writing down an idea about the architecture of such models, then came back here; realized that I should re-write this section, started doing that, edited the introduction to fit, went back to the re-write, and here we are. I'm not even half-way done with the article and I'm sure I already forgot several steps that I took.
 
-Now contrast that with the way an LLM currently writes: It generates text forward-only. (Almost) no matter how good it is, it will make mistakes, especially in out-of-distribution (OOD) domains. And while we can train it to backtrack and correct those mistakes, the mistakes themselves are baked into its output, and thus into both its own context window and the user answer. The latter is a problem because it makes it hard to produce long, correct outputs, the former because it is confusing to the model itself.
+Now contrast that with the way an LLM currently writes: It generates text forward-only. (Almost) no matter how good it is, it will make mistakes, especially in out-of-distribution (OOD) domains.
 
-Additionally, forward-only generation makes multi-resolution generation much more difficult: I as a human can create hundreds of versions of the same article; edit a sentence here and there, write down an idea as a bulletpoint, delete something dumb, turn a bulletpoint into a full section, etc.; in other words, I can interleave actions at different levels of specificity. Imagine how confusing it would be to hold all those edits in memory at once!
+And while we can train it to backtrack and correct those mistakes in the form of **reasoners**, the mistakes themselves are baked into its output, and thus into both its own context window and the user answer. The latter is a problem because it makes it hard to produce long, correct outputs, the former because it is confusing to the model itself if the output gets very long.
+
+Additionally, forward-only generation makes **multi-resolution generation** much more difficult: I as a human can create hundreds of versions of the same article; edit a sentence here and there, write down an idea as a bulletpoint, delete something dumb, turn a bulletpoint into a full section, etc.; in other words, I can interleave actions at different levels of specificity. Imagine how confusing it would be to hold all those edits in memory at once!
 
 Editing through external tools allows for explicit, selective forgetting. LLMs on the other hand either need to generate from most general to most specific in order&mdash;a very limiting way of multi-scale generation compared to tool-use&mdash;or generate a confusing mess of edits and re-edits and deletions that aren't true deletions; or re-generate the entire output for every single edit; or just generate the final version all at once.
+
+More generally, **extremely long contexts** are difficult to manage for LLMs, but might be required for very complex tasks.
 
 Methods like [Entropix](https://github.com/xjdr-alt/entropix) try to work around these issues by dynamically adapting token-sampling parameters like temperature, by branching and merging on demand, and even backtracking, all based on an external measurement of the model's entropy. Good sampling strategies will be valuable no matter what, but leaving the editing decisions to the model itself is likely a more scalable approach, as demonstrated to a degree by current reasoners.
 
@@ -117,6 +123,6 @@ Thanks to [stochasm](https://x.com/stochasticchasm) for proof-reading the articl
     author={Sebastian Nicolas Müller},
     year={2025},
     month={04},
-    url={https://snimu.github.io/2025/05/22/infinite-tool-use.html}
+    url={https://snimu.github.io/2025/05/23/infinite-tool-use.html}
 }
 ```
