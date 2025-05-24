@@ -36,27 +36,25 @@ The tags are similar to a system prompt; but because they apply throughout pre-t
 
 ## Examplary use-cases
 
-This section gives examples of potential advantages brought about by this design
+This section gives examples of potential advantages brought about by a separation of simulacra.
 
 ### Compartmentalize the Waluigi
 
-An agent needs to know bad behaviors in order to express only good ones, so when we train a model to behave in extreme manners, like never telling a user how to make Meth, we also train it to simulate the character that will always explain how to make Meth: its [Waluigi](https://www.lesswrong.com/posts/D7PumeYTDPfBTp3i7/the-waluigi-effect-mega-post). When successfully prompted to deviate from this extreme behavior of refusals, it can surface its Waluigi, making it generally unsafe. And because a model will never be 100% successful at always refusing, this means that safety training will always introduce a hidden vulnerability.
+An agent needs to know bad behaviors in order to be able to express only good ones, so when we train a model to behave in extreme manners, like never telling a user how to make Meth, we also train it to simulate the character that will always explain how to make Meth: its [Waluigi](https://www.lesswrong.com/posts/D7PumeYTDPfBTp3i7/the-waluigi-effect-mega-post). When successfully prompted to deviate from this extreme behavior of refusals, it can surface its Waluigi, making it generally unsafe. And because a model will never be 100% successful at always refusing, this means that safety training will always introduce a hidden vulnerability.
 
 Tags might help compartmentalize the two. If we train our desired agent on one set of tags, and its Waluigi on a different one, we might not be forced to train both behaviors&mdash;the wanted one and, implicitly, its opposite&mdash;into the same simulacra.
 
 ### Use-case specficity and character control
 
-I'm not sure if the above will actually work. However, whether it does or not, using tags allows us much better character-control: 8kun, Wikipedia, arXiv, and X all have very different connotations, and will heavily influence the character. The same is true for the `<author>` tag, the `<date>` tag (though to a lesser degree), and others. And it is obvously easy to combine tags that don't appear together in pre-training (like `<url>https://x.com</url>` together with `<isbn>...</isbn>`), put multiple values into one tag (like `<author>God Almighty, Satan</author>`), or repeat tags.
+I'm not sure if the above will actually work. However, whether it does or not, using tags allows us much better character-control: 8kun, Wikipedia, arXiv, and X all have very different connotations, and will heavily influence the character. The same is true for the `<author>` tag, the `<date>` tag (though to a lesser degree), and others. And it is obvously easy to combine tags that don't appear together in pre-training (like `<url>https://x.com</url>` together with `<isbn>...</isbn>`), put multiple values into one tag (like `<author>Gwern, Genghis Khan</author>`), or repeat tags.
 
-That is obviously good for alignment.
+That is obviously good for alignment and capabilities.
 
-If you're a company, you can get a head-start on your character-design simply by using the right tags in post-training, and if you're and individual like [@repligate](https://x.com/repligate) or [@anthrupad](https://x.com/anthrupad) who is into exploring LLM behavior deeply, you now have a tool for much more explicit illumination of the dusty corners of behavior-space.
+If you're a company, you can get a head-start on your character-design simply by using the right tags in post-training, and if you're and individual like [@repligate](https://x.com/repligate) or [@anthrupad](https://x.com/anthrupad) who is into exploring LLM behavior deeply, you now have a tool for explicit illumination of the dusty corners of behavior-space.
 
 > Note: model providers might not allow for access to those special tokens in fear of giving users too much control. While I'm not a fan of the attitude, I understand its business logic, and offer the following compromise: do offer users control over the tags, but police the tags the way you currently police the text outputs themselves. This would likely be easier, and still give your users access to powerful capabilities. Again, I don't find this super appealing, and Open Source competitors will gain an advantage by simply making the tags freely controllable, but it is a decent option.
 
-But it's also a big win for capabilities.
-
-The separation of simulacra might allow you to train multiple distinct agents for different use-cases, and bring forth the correct one simply by changing the tags: a chat agent, a research agent, a CLI agent, etc. This is great for distribution and user experience, but it goes further than that.
+For capabilities, the separation of simulacra might allow you to train multiple distinct agents for different use-cases, and bring forth the correct one simply by changing the tags: a chat agent, a research agent, a CLI agent, etc. This is great for distribution and user experience, but it goes further than that.
 
 The separation of simulacra allows for specialist agents within one model; all expressing different behaviors, and bringing forth certain skills via RL, without diminishing the other agent. All would likely still have access to the full knowledge and skill set, and potentially even benefit from the others' training (though that's just a hope of mine). The different agents could even serve as judges or teachers for other agents expressed by the same LLM.
 
@@ -66,13 +64,15 @@ It also makes it easy to re-combine the agents: just write multiple ones into th
 
 The ultimate capability that the separation of simulacra might enable is continual learning.
 
-An issue with continual learning is catastrophic forgetting. Teach the model new facts and it will forget old ones. However, I believe that this is at least in part due to LLMs being [Contextualization Machines](https://stochasm.blog/posts/contextualization-machines/). They produce outputs *conditional on the context*. If the context does not leave enough criterial with which to differentiate it from another context, then of course following it up with text B will lead the model to unlearn to complete this context with text A, even if it was previously trained to produce text A from the context.
+An issue with continual learning is catastrophic forgetting. Teach the model new facts and it will forget old ones. However, I believe that this is in part due to LLMs being [Contextualization Machines](https://stochasm.blog/posts/contextualization-machines/). They produce outputs *conditional on the context*. If the context does not leave enough criterial with which to differentiate it from another context, then of course following it up with text B will lead the model to unlearn to complete this context with text A, even if it was previously trained to produce text A from the context.
 
 Tags work around this issue by providing additional context which allows the model to retain the ability to express previously learned information *in the context in which it learned it*.
 
-Beside the obvious use-cases of continual learning, this might allow us to provide an agent with new information *in the weights* without overwriting its behavior, simply by training the information conditioned on different tags. This new information should be available to the agent. For example, we could train on a new paper, without the agent suddenly sounding like it wants to lecture you. In general, a model will contextualize new data better and thus be less likely to overwrite previous knowledge.
+Beside the obvious use-cases of continual learning, this might allow us to provide an agent with new information *in the weights* without overwriting its behavior, simply by training the information conditioned on different tags. This new information should then be available to the agent. For example, we could train the LLM on a new paper, without the agent suddenly sounding like it wants to lecture you. In general, a model will contextualize new data better and thus be less likely to overwrite previous knowledge.
 
-As a sidenote, the same effects might make curriculum learning more effective. A `<date>...</data>` tag will help the model contextualize new information much better, and thus help it make connections between different pieces of information. This is of course true for any of the tags, but it's especially relevant here.
+> Of course, contextualization issues aren't the *only* problem with continual learning, not by a long shot; but they do seem relevant enough for tags to provide a real advantage.
+
+As a sidenote, the same effects might make curriculum learning more effective. A `<date>...</date>` tag will help the model contextualize new information much better, and thus help it make connections between different pieces of information. And sorting data by time is of course not the only method that can be used with tags; sorting by author, or source, or data type (code, general text, ...), can be used just as easily, as long as the tags contain the information needed to impose an order on the data.
 
 ## Why tags might be a bad idea
 
@@ -82,9 +82,9 @@ Providing much of this context via tags might reduce the incentive for models to
 
 And while it'd make explicit control of the models easier, it's possible that it would also reduce the ways in which LLMs could be steered in more subtle manners. Some companies would prefer that: it's a security boon, and makes it easier for companies to guardrail the models without the need for schizophrenic LLM whisperers, and increase reliability from the perspective of customers. On the other hand, it is also a capability that many will miss for legitimate reasons.
 
-The obvious solution to this dilemma is to leave out the tags completely for a decent percentage of the training data (10%? 20%?). This could actually improve the model's ability to infer context, because it has seen from what context different types of text are created, and if it guesses wrong, it will be updated strongly.
+The obvious solution to this dilemma is to leave out the tags completely for a decent percentage of the training data (10%? 20%?). This could actually improve the model's ability to infer context compared to both using no tags at all and to always using tags. It will have seen explicit context-labels in the form of tags in many data-points, making it easier to infer context from raw text; but it will also be forced to infer context from raw text, which might help it make use of the text written into the tags.
 
-Another option is to add the tags at the end of the text in some samples. Ignore the loss at the special-token tags so that the model doesn't learn to just randomly produce them (or just actively set their probability to 0 during inference, or both), and actively train the model to infer context.
+Another option is to add the tags at the end of the text in some samples. Ignore the loss at the special-token tags so that the model doesn't learn to just randomly produce them (or just actively set their probability to 0 during inference, or both), and actively train the model to infer the URL, author, data, etc. just from the raw text.
 
 ## Words of caution
 
@@ -101,7 +101,7 @@ Additionally, I do not believe that any of the effects I've described would appl
     title={\<Tags\> make them smart, \<Tags\> make them safe},
     author={Sebastian Nicolas Müller},
     year={2025},
-    month={04},
+    month={05},
     url={https://snimu.github.io/2025/05/03/tags-make-them-smart-tags-make-them-safe.html}
 }
 ```
