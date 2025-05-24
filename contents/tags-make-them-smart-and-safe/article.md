@@ -1,32 +1,36 @@
 # \<Tags\> make them smart, \<Tags\> make them safe
 
-I've read in muliple places (e.g. !!!!!!!!!!TODO!!!!!!!!!!) that including metadata about a piece of text in tags around that text improves pre-training performance. But those works, as far as I know, end their training runs on raw texts so that the model can be used without tags. I don't understand why that should be desireable.
+I've read in muliple places that including metadata about a piece of text in tags around that text improves pre-training performance of LLMs. But those works, as far as I know, end their training runs on raw texts so that the model can be used without tags. I don't understand why that should be desireable.
 
-Pre-trained LLMs are simulators, but companies post-train them to be agents, which can make the LLMs worse world models but more economically useful. Tags resolve that conflict: just have the simulator simulate the agent by training it to behave a certain way, conditional on some tags. The tags allow for a **separation of simulacra**, and that separation will be much sharper and much easier to control than when training and doing inference with pure text.
+In LLMs, there is a conflict between pre- and post-training: Pre-trained LLMs are simulators, but companies post-train them to be agents, which can make the LLMs worse world models but more economically useful. Tags resolve that conflict: just have the simulator simulate the agent by training it to behave a certain way, conditional on some tags.
+
+The tags allow for a **separation of simulacra**, and that separation will be much sharper and much easier to control than when training and doing inference with pure text.
 
 These advantages generalize to many domains: safety, continual learning, character design, and more.
 
-To be clear, this is an extremely speculative post, and you should take everything I say with a big grain of salt. Additionally, I will phrase a lot my claims confidently and strongly, but even if the claims turn out to be directionally correct, effects may be small or nonexistent.
+To be clear, this is an extremely speculative post, and you should take everything I say with a large grain of salt. I will phrase a lot my claims very strongly, but even if the claims turn out to be directionally correct, effects may be small or nonexistent.
 
 ## What exactly do I mean by tags?
 
-Quite simply, give the model metadata about the text it is trying to predict. For example. `<url>https://snimu.github.io></url>`, or `<date>2025-05-01</date>`.
+Quite simply, give the model metadata about the text it is trying to predict. For example. `<url>https://snimu.github.io></url>`, or `<date>2025-05-24</date>`.
 
-I'd make the tags themselves (`<url>`, `<data>`, ...) special tokens, which has two advantages: 1) The tags cannot just be typed out and faked by users if you don't want that; 2) If you do want the tags to be changeable by the users, they will have a huge impact (they were trained throughout the entirety of pre-training); 3) They won't interfere with normal XML tags that might be used in code etc.
+I'd make the tags themselves (`<url>`, `<data>`, ...) special tokens, which has three advantages:
 
-> Sidenote: Using a Mixture of Tokenizers (MoT, see [here](https://snimu.github.io/2024/09/03/mixture-of-tokenizers.html) and [here](https://snimu.github.io/2025/01/28/mixture-of-tokenizers-math.html)), which uses both tokens and their component bytes at the input, we could make the characters in the tags visible to the model, while still using the special tokens as steering vectors.
+1. The tags cannot just be typed out and faked by users if you don't want that (for example, if you want to use tags to closely control model behavior in your App)
+2. If you *do* want the tags to be changeable by the users, they will have a huge impact (they were trained throughout the entirety of pre-training), giving users a great amount of control
+3. At the same time, they won't interfere with normal XML tags that might be used in code etc.
 
-The text within the tags would be normal text tokens though. This makes them more flexible during deployment. This way, you could, for example, write `<author>GOD ALMIGHTY</author>` tags during inference and see some interesting behaviors. I will show more use-cases further down.
+The text within the tags should be normal text tokens though, which makes them more flexible during deployment. This way, you could, for example, write `<author>GOD ALMIGHTY</author>` tags during inference and see some interesting behaviors. I will show more use-cases further down.
 
-To be clear, I think we do need to train a bit without tags, or with some tags dropped, or the tags in random order, or tags with empty labels, etc. A lot of this will happen naturally (you will use different tags for blog posts than for books, or reasearch papers, or legal documents, etc.), but using such data-augmentations on purpose from time to time will likely make the model more robust.
+To be clear, I think we do need to train a bit without tags, or with some tags dropped, or the tags in random order, or tags with empty labels, etc., to make the models more robust. A lot of this will happen naturally (you will use different tags for blog posts than for books, or reasearch papers, or legal documents, etc.), but using such data-augmentations on purpose from time to time is likely a good idea.
 
 ## Why does this lead to a separation of simulacra?
 
-A model can learn many things, but what it says depends on its conditioning. When the conditioning between different texts is very indistinct, the model will learn the most abundant completion. This is by necessity: even if it is possible for the model to memorize all the possible completions, producing the most common one will minimize loss if the LLM cannot successfully infer the context of the text. Yes, this is phrased as if LLMs were trained autoregressively, but it certainly has impact on them even in teacher-forced pre-training. After all, context is very abstract, and appears many times over in texts.
+A model can learn many things, but what it says depends on its conditioning. When the conditioning between different texts is very indistinct, the model will learn the most common completion. This is by necessity: even if it is possible for the model to memorize all the possible completions, producing the most common one will minimize loss if the LLM cannot successfully infer the context of the text. This is true whether memorization means actual memorization or the learning of generalized functions.
 
-Just adding an author, date, and source tag will do wonders here, enabling the model to learn and, importantly, express much more distinct simulations, conditioned on much more explicit inputs. If a single source says the same thing over and over again in response to some prefix, the model can easily predict that completion given tags, reducing the loss and thus the weight of that source. If there is another source with a different tag, which completes the same prefix a different way, the model can learn to differentiate the two, and build a more complex and complete understanding of what's going on.
+Just adding an author, date, and source tag will do wonders here, enabling the model to learn and, importantly, express much more distinct simulations, conditioned on much more explicit inputs. If a single source says the same thing over and over again in response to some prefix, the model can easily predict that completion given tags, reducing the loss and thus the weight of that source. If there is another source with a different tag, which completes the same prefix a different way, the model can learn to differentiate the two, and build a more complex and complete understanding of what's going on. With luck, this contextual understanding will generalize beyond the tags themselves, though I'm not certain that it will.
 
-Here's an analogy: RL uses Chains of Thought as training data; RL simply weights the gradients of those CoTs by data quality. Tags allow the model to do essentially the same thing during pre-training.
+Here's an analogy: RL uses Chains of Thought as training data; RL simply weights the gradients of those CoTs by data quality. Tags allow the model to do essentially the same thing with any piece of text during pre-training.
 
 The tags are similar to a system prompt; but because they apply throughout pre-training, and are so distinct from the other tokens, there is a real separation between the guidance that they give and the rest of the text. In other words, a soft but real separation between program and data can potentially be achieved via tags, because the tags impact the *program* simulated by the LLM so strongly that other inputs are more distinctly data-only. Obviously, this wouldn't fully fix everything, but I believe it could help.
 
