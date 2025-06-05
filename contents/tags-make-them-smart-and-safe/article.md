@@ -1,6 +1,6 @@
 # Separating Simulacra: \<tags\> make them smart, \<tags\> make them safe
 
-I've read in muliple places that including metadata about a piece of text in tags around that text improves pre-training performance of LLMs. But those works, as far as I know, end their training runs on raw texts so that the model can be used without tags. I don't understand why that should be desireable.
+I've seen multiple papers where LLM training data included tags providing metadata, which improved the models' downstream performance. However, as far as I can tell, they always end training on pure text data so that the models can be used without tags. I don't understand why that should be desireable.
 
 In LLMs, there is a conflict between pre- and post-training: Pre-trained LLMs are simulators, but companies post-train them to be agents, which can make the LLMs worse world models but more economically useful. Tags resolve that conflict: just have the simulator simulate the agent by training it to behave a certain way, conditional on some tags; without losing the ability to express other simulacra given other tags as context.
 
