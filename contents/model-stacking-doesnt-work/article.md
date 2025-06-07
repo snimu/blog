@@ -138,4 +138,12 @@ Importantly, stacking and then post-training makes little sense, because there a
 
 ## Citation
 
-...
+```bibtex
+@misc{snimu2025modelstackingdoesntwork,
+    title={Model stacking doesn't work},
+    author={Sebastian M\"uller},
+    year={2025},
+    month={6},
+    url={https://snimu.github.io/2025/06/07/model-stacking.html}
+}
+```
