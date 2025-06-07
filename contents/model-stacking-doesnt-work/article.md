@@ -130,11 +130,9 @@ Some observations:
 
 All in all, this trick seems to make things worse rather than beter.
 
-## What now?
+## Conclusion
 
-I won't be pursuing the idea further.
-
-Importantly, stacking and then post-training makes little sense, because there are better methods of franken-merging a model with itself and then post-training, or training for layer looping.
+I won't be pursuing this idea further.
 
 ## Citation
 
