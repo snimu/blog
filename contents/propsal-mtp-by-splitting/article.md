@@ -6,17 +6,17 @@ This has an obvious disadvantage: each chunk is now reduced in dimensionality, s
 
 However, I also see a potentially big advantage: in the MTP prediction methods that I'm aware of, the same output hidden state is always decoded in multiple tokens, which means that it has to contain specific information about both the next token to be decoded, and at the same time enough abstract semantics for some additional mechanism to decode another token ahead. Splitting the hidden state and decoding each chunk into a different token prediction explicitly avoids this issue.
 
-I will first go into this advantage of split MTP by pointing out the weakness of other methods. Then, I will discuss ways to soften the blow of reduced hidden state dimensionality, or maybe even circumvent it fully. Finally, I will present a way in which the method can adapted to obtain the large benefits of DeepSeek's MTP approach.
+I will first discuss advantages and disadvantages of two other methods of MTP, compared to the advantages and disadvantes of splitting-then-predicting. Then, I will present mitigating measures against the issue of reduced hidden state size for the split MTP. Finally, I will bring it together into a DeepSeek-like MTP schema with some changes that I hope are mostly beneficial (but I don't know for sure).
 
 ## Advantages
 
-The advantages of this method are in response to the disadvantages of other methods.
+The advantages of the split method are in response to the disadvantages of other methods.
 
 ### The Disadvantages of other methods for MTP
 
 Over the course of the forward pass, LLMs move the representation of the data in the residual stream from pure, cleanly separated tokens at the input, to very abstract concepts in the middle layers, to concrete tokens (the next-token predictions) at the output again.
 
-The MTP techniques that I'm most aware of actively play againt this dynamic. I'll focus on two specific techniques: Meta's [Better & Faster Large Language Models via Multi-token Prediction](https://arxiv.org/abs/2404.19737) and [DeepSeek V3](https://arxiv.org/abs/2412.19437).
+The MTP techniques that I'm most aware of actively play against this dynamic. I'll focus on two specific techniques: Meta's [Better & Faster Large Language Models via Multi-token Prediction](https://arxiv.org/abs/2404.19737) and [DeepSeek V3](https://arxiv.org/abs/2412.19437).
 
 My critique relies on the fact that the language head is just an inverse embedding layer, which you can convince yourself of by realising that the embedding layer and language head sometimes share the same weight in order to save parameters. Therefore, if we have an output distribution that puts all its weight onto a single token, then the output-hidden state of the transformer is a direct embedding of that token, which is simply linearly projected into a different space. This means that in order to get the best possible probability distribution, the hidden state needs to be a superposition of all the output tokens, with their respective weight.
 
@@ -68,19 +68,17 @@ In other words, DeepSeek's MTP prediction works because it gives a very strong s
 
 A second problem with this method is that it requires information about future tokens to work. During inference, you don't know the actual next token; that's what you're generating! So you have to do what [_xjdr](https://x.com/_xjdr) does (if I remember correctly, I can't actually find the tweet to cite): Forward pass through the model, sample a next token, then predict the token after that with the MTP machinery and your predicted token. Of course, you do have those tokens available to you during training, where it can therefore certainly help with the training dynamics; still, this is a slight downer.
 
+> Note: The advantage of using DeepSeek's MTP prediction during inference is of course a speedup: yes, we need to produce the tokens sequentially because the second prediction depends on the first, but we only have to do a forward pass on the full model once; afterward, it's a single normalization, linear projection, and one transformer layer, which is nothing.
+
 ### Advantages of MTP by Splitting
 
 The split MTP method explicitly assigns different jobs to different parts of the output hidden state: predicting a different number of tokens ahead. This way, it avoids the issue of the hidden state having to contain both explicit information about the next token and enough abstract information to allow extracting tokens further down the line.
-
-If the degree of separation between the tokens is insufficient, we can simply split the model earlier and run a few independent transformer blocks. This would reduce the number of parameters, which would have to be compensated of course.
-
-> Let's say we predict `k` tokens ahead. That means that we split the hidden state into `k` pieces. A transformer's MLP has `2 * expansion_factor * model_dim.pow(2)` parameters (two layers going from `model_dim` to `expansion_factor` or vice versa). If we split the hidden state, it will be `2 * expansion_factor * (model_dim / k).pow(2)` parameters in each MLP, so a factor of `k**2` fewer parameters. We now have `k` such MLPs per layer instead of one, so in total, the number of parameters is reduced by a factor of `k`.
 
 Another advantage of split MTP is that MTP comes inherently with the model, no extra parameters needed (at least in this simple configuration). The Meta Method requires extra language heads, and DeepSeek's method extra transformer heads. This isn't a big deal, but I'll take it.
 
 What's also nice is that our shared language head is smaller, which saves us a lot of parameters. However, it's of course also the cause of the one big disadvantage of this method: reduced fidelity of the language head.
 
-## Combatting the reduced hidden state size
+## Mitigating the reduced hidden state size
 
 I can think of two options for combatting the issue of reduced hidden-state size: ["Project and Split"](#project-and-split) and ["Uneven Split"](#uneven-split).
 
@@ -125,12 +123,14 @@ Now, we have the following advantages compared to the DeepSeek MTP method:
 
 - The model cannot rely on the true next token for next-next-token prediction, but still depends on the next-token prediction, making stronger all of the next-token-prediction-signal, the next-next-token-prediction-signal, and the signal to improve the model's abstract representation
 - That signal to the abstract representation comes directly from c2, and thus avoids the bottleneck of the hidden state having to provide a superposition of tokens for optimal next-token predictibility, and provision of abstract information for next-next-token prediction
-- And just to stress it again, the conflic between these two goals is reduced
+- And just to stress it again, the conflict between these two goals is reduced
 - Model can provide way more information to further-down tokens than prob distr and input tok
 
-Too add to all that, we retain DeepSeek's advantage of prediction n to be backpropagagted through prediction n-1, making the latter stronger through an additional but meaningfully different training signal.
+To add to all that, we retain DeepSeek's advantage of prediction n to be backpropagagted through prediction n-1, making the latter stronger through an additional but meaningfully different training signal.
 
-Of course, our great disadvantage remains: the hidden-state size per token is reduced significantly, and while we can of course combine this with the techniques presented above ([Project and Split](#project-and-split) and [Uneven Split](#uneven-split)), the high quality small hidden state size might still be worse than the full hidden state with a conflict between decoding and providing information to downstream predicitons.
+Of course, our great disadvantage remains: the hidden-state size per token is reduced significantly, and while we can of course combine this with the techniques presented above ([Project and Split](#project-and-split) and [Uneven Split](#uneven-split)), the high quality small hidden state size might still be worse than the full hidden state with a conflict between decoding and providing information to downstream predictions.
+
+Additionally, DeepSeek's method for MTP works with teacher forcing at every predicted token, while my method doesn't. Whether that's good or bad is unclear to me. Let's say S is the input sequence length. On the one hand, having the true token S+1 available for predicting token S+2 prevents an error cascade from prediction S+1 to prediction S+2. On the other hand, predicting token S+2 only from the hidden states that were produced from tokens 1 to S is closer to autoregressive prediction, which might be beneficial. And if my method doesn't work as presented above, it's possible to just append the embedding of the true token S+1 to h1 and c1 (or even train that way with a WSD schedule to get the model's error rate below some threshold, decay the learning rate, then remove the concatenated token S+1 and warm up again and train so that the model is brought closer to the downstream task of autoregressive prediction).
 
 ## Summary and outlook
 
@@ -153,7 +153,7 @@ Clearly, (their method of) MTP makes model performance worse unless the model is
     title={(Proposal) Multi Token Prediction by splitting hidden states},
     author={Sebastian Nicolas Müller},
     year={2025},
-    month={07},
+    month={July},
     url={https://snimu.github.io/2025/07/18/split-mtp.html}
 }
 ```
