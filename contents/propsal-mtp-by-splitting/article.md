@@ -130,8 +130,30 @@ Now, we have the following advantages compared to the DeepSeek MTP method:
 
 Too add to all that, we retain DeepSeek's advantage of prediction n to be backpropagagted through prediction n-1, making the latter stronger through an additional but meaningfully different training signal.
 
-Of course, our great disadvantage remains: the high quality small hidden state size might still be worse than the full hidden state with a conflict between decoding and providing information to downstream predicitons.
+Of course, our great disadvantage remains: the hidden-state size per token is reduced significantly, and while we can of course combine this with the techniques presented above ([Project and Split](#project-and-split) and [Uneven Split](#uneven-split)), the high quality small hidden state size might still be worse than the full hidden state with a conflict between decoding and providing information to downstream predicitons.
 
-## Bringing it all together
+## Summary and outlook
 
-... Can use any combination of the above techniques: project-then-split and/or uneven-split, split earlier in the model, DeepSeek method for MTP
+I have introduced a method for Multi Token Prediction (MTP) by splitting the output hidden state of a language model and using the same language head to predict a different future token from each of the chunks.
+
+This method has the great disadvantage of reducing the hidden state size for predicting the next tokens. While I've introduced two possible mitigating measures in 1) first projecting up, applying a non-linearity, and then splitting, and 2) splitting unevenly if some token predictions are more important to us than others, it is unclear if they actually work and if they do, how well.
+
+I have then adapted the split MTP method I've introduced to gain the advantages of DeepSeek's MTP method without the disadvantages (which are pure speculation from my side, to be clear).
+
+As an outook, here is the plot of Meta's results for different model sizes (all trained for at least 200B bytes, so around 30-40B tokens):
+
+![Meta Method: results for different model sizes](images/meta-mtp-results.png)
+
+Clearly, (their method of) MTP makes model performance worse unless the model is pretty large. DeepSeek does their ablations on MTP with even larger models, and on more data. What that tells me is that I don't have the money to properly try my method out, so I won't. I'd be very happy though if somebody else tried their hands on it!
+
+## Citation
+
+```bibtex
+@misc{snimu2025mtp,
+    title={(Proposal) Multi Token Prediction by splitting hidden states},
+    author={Sebastian Nicolas Müller},
+    year={2025},
+    month={07},
+    url={https://snimu.github.io/2025/07/18/split-mtp.html}
+}
+```
