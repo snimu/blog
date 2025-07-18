@@ -14,9 +14,19 @@ The advantages of this method are in response to the disadvantages of other meth
 
 ### The Disadvantages of other methods for MTP
 
-Over the course of the forward pass, LLMs move the representation of the data in the residual stream from pure, cleanly separated tokens at the input, to very abstract concepts in the middle layers, to concrete tokens (the next-token predictions) at the output again. See for example [Layer by Layer: Uncovering Hidden Representations in Language Models](http://arxiv.org/abs/2502.02013) or [Do Llamas Work in English? On the Latent Language of Multilingual Transformers](https://arxiv.org/abs/2402.10588).
+Over the course of the forward pass, LLMs move the representation of the data in the residual stream from pure, cleanly separated tokens at the input, to very abstract concepts in the middle layers, to concrete tokens (the next-token predictions) at the output again.
 
 The MTP techniques that I'm most aware of actively play againt this dynamic. I'll focus on two specific techniques: Meta's [Better & Faster Large Language Models via Multi-token Prediction](https://arxiv.org/abs/2404.19737) and [DeepSeek V3](https://arxiv.org/abs/2412.19437).
+
+My critique relies on the fact that the language head is just an inverse embedding layer, which you can convince yourself of by realising that the embedding layer and language head sometimes share the same weight in order to save parameters. Therefore, if we have an output distribution that puts all its weight onto a single token, then the output-hidden state of the transformer is a direct embedding of that token, which is simply linearly projected into a different space. This means that in order to get the best possible probability distribution, the hidden state needs to be a superposition of all the output tokens, with their respective weight.
+
+On the other hand, the model needs to perform a lot of abstract computation in an abstract space in order to produce the correct superposition of tokens. This is unlikely to happen in such a clean superposition of specific tokens; and more likely in the superposition of both abstract and concrete concepts, of which there may be more or fewer than there are tokens in the vocabulary.
+
+Therefore, the ideal abstract data representation likely doesn't look the same as the ideal output hidden state for predicting the token probabilities. Here are two papers that provide evidence for this difference in representations: [Layer by Layer: Uncovering Hidden Representations in Language Models](http://arxiv.org/abs/2502.02013) or [Do Llamas Work in English? On the Latent Language of Multilingual Transformers](https://arxiv.org/abs/2402.10588).
+
+And yes, there is evidence that the differences aren't extreme: after all, we can 1) simply apply the language head to the residual stream at any layer, or 2) train a linear probe at any layer in the layer. Both produce sensible predictions. However, neither achieves the same quality as the actual language head (at next-token prediction; for other downstream tasks, the abstract representations from the middle of the model are often better).
+
+This leads me to conclude that the objectives of producing a high-quality abstract state for making sense of the input and performing the necessary thought process for producing the output, and a producing a high-quality output hidden state for generating a next-token probability distribution, are not fully aligned; the latter just happens to produce the former in the middle of the model.
 
 #### Better and Faster Large Language Models via Multi-token Prediction
 
@@ -26,16 +36,16 @@ In the Meta Method, the authors use the exact same hidden state to make predicti
 
 ![Better & Faster Large Language Models via Multi-token Prediction: MTP by multiple language heads](images/mtp-meta.png)
 
-The issue I see with this is that it is the transformer that provides most of the intelligence; the language head just moves the output hidden state into a different representation, one in which it can be interpreted as token probabilities (after a softmax at least). For this to work best, the representation of the output hidden state must be very specialized to being helpful to the language head. In other words, for the language head to be able to make a very sharp prediction that puts a lot of weight on a single token, the output hidden state must already be a representation of that token in a different space.
+This means that in the Meta Method, the output hidden state of the transformer must contain the information necessary to be decoded into four different probability distributions, and the job of differentiating between them lies with the language heads.
 
-In the Meta Method, the output hidden state of the transformer must contain the information necessary to be decoded into four different tokens, and the job of differentiating between them lies with the language heads.
+To do so, the output hidden state must be a weighted superposition of all tokens; but four times! I strongly suspect that this requires the different language heads (which, remember, are inverse embeddings) to look out for completely different embeddings each, and for those embeddings to be clearly linearly separable. In other words, the model must now project into a four times larger vocabulary.
 
-I strongly suspect that this forces the model to implicitly learn what I want to make explicit: to store the information about each token in a different part of the hidden state. However, there are a few disadvantages I see to the Meta Method compared to the one I'm proposing:
+That's obviously very similarly to what I do: In the Meta Method, the hidden state of size `D` must be decoded into an effective vocabulary size of size `V * 4`, while in the split MTP method, a hidden state of size `D / 4` must be decoded into a vocabulary size `V`. However, there are a few disadvantages I see to the Meta Method compared to the one I'm proposing:
 
-- Just like my method, the Meta Method effectively reduces the available hidden state size
 - The Meta Method needs one language head per token predicted ahead; Mine only needs a single language head for them all
-- This is speculation, but I believe that this hurts training dynamics. My (kinda vague) explanation is this: The language heads are required to select only parts of the hidden state. But they don't have an explicit selection mechanism like ReLU available to them. Also, they all work on the same hidden state. Therefore, in order to be able to distinguish the information in the hidden state, they need to use combinations of hidden-state features to suppress ones meant for the other language heads, which wastes a lot of capacity. This, in turn, makes the effective size of each hidden-state chunk even smaller. (Again, this is just my vague speculation!)
-- A different perspective on why this hurts training dynamics (also speculative) is that it forces the language heads to compete over resources, which muddies the waters of the gradients, similarly to how [images and text compete in non-MoE language models](http://arxiv.org/abs/2504.07951). My hope is that with explicit splitting of the hidden state but sharing of a single language head, this competition for resources will be reduced
+- Of course, it is theoretically possible for the hidden state to represent the embeddings for the four language heads in such a linearly separable way that it's exactly equivalent to the split MTP method; but in the latter this is pre-determined from the start, while in the former, it has to be learned, which means that the gradient has less capacity to teach the model other, more important things (speaking very roughly)
+- Mechanistically (but kinda vaguely), the language heads in the Meta Method are required to select only parts of the same hidden state, but they don't have an explicit selection mechanism like ReLU available to them. Therefore, in order to be able to distinguish the information in the hidden state, they need to use combinations of hidden-state features to suppress ones meant for the other language heads, which wastes a lot of capacity. This, in turn, makes the effective size of each hidden-state chunk even smaller, unless the model has learned the linear separation perfectly.
+- The reason why I believe that learning the linear separability of the output token embeddings wastes a lot of training capacity is that it forces the language heads to compete over resources, which muddies the waters of the gradients, similarly to how [images and text compete in non-MoE language models](http://arxiv.org/abs/2504.07951). My hope is that with explicit splitting of the hidden state but sharing of a single language head, this competition for resources will be reduced
 
 #### DeepSeek's MTP
 
@@ -98,22 +108,29 @@ Of course, this method can be combined with the [Project and Split](#project-and
 
 ### Catching Up to DeepSeek
 
-The great advantage of DeepSeek's MTP method is, as far as I can tell, that the next-next-token prediction relies on the model's own next-token prediction and can thus be backpropagated through both, which provides an additional training signal per token *for the next-token prediction*, making the next-token prediction stronger.
+The great advantage of DeepSeek's MTP method is, as far as I can tell, that the next-next-token prediction relies on the model's own next-token prediction and can thus be backpropagated through both, which provides an additional training signal per token *for the next-token prediction*, making the next-token prediction stronger. The disadvantages are 1) that the output hidden state of the next-token prediction is used, which either means less learning or worse decoding or both; and 2) that during inference, it requires information that is not available.
 
+We can get (some of) that advantage without the disadvantages by adapting the split MTP method:
 
-
-- Split
-- Predict first token from first chunk (c1==h1)
-- Then concatenate first chunk and second chunk c2
-- Project them back down
-- Transfomer layer -> h2
+- Split the output hidden state into four chunks, c1-c4
+- Predict first token from first chunk, which is also the first hidden state h1 (c1==h1)
+- Then concatenate first hidden state h1 and second chunk c2
+- Normalize, FC, transformer layer -> second hidden state h2
 - Predict second token from h2
 - Repeat with h2 and third chunk c3, etc.
 
-Advantages:
+This provides us with two information paths for the second token to predict: h1 and c2. That's important because it allows h1&mdash;from which the next token is predicted&mdash;to only contain the information needed to predict the next token, a.k.a. a superposition of token-embeddings, while using c2 to provide rich, abstract information for the subsequent prediction. Because there is a linear projection followed by a transformer layer between h1+c2 and the second next-token prediction, the model has plenty of time to transform that abstract representation into a concrete superposition of embeddings, so this split is actually possible (and likely encouraged).
 
+Now, we have the following advantages compared to the DeepSeek MTP method:
+
+- The model cannot rely on the true next token for next-next-token prediction, but still depends on the next-token prediction, making stronger all of the next-token-prediction-signal, the next-next-token-prediction-signal, and the signal to improve the model's abstract representation
+- That signal to the abstract representation comes directly from c2, and thus avoids the bottleneck of the hidden state having to provide a superposition of tokens for optimal next-token predictibility, and provision of abstract information for next-next-token prediction
+- And just to stress it again, the conflic between these two goals is reduced
 - Model can provide way more information to further-down tokens than prob distr and input tok
-- Predictions will always be backpropagated through the model more fully (put this better!)
+
+Too add to all that, we retain DeepSeek's advantage of prediction n to be backpropagagted through prediction n-1, making the latter stronger through an additional but meaningfully different training signal.
+
+Of course, our great disadvantage remains: the high quality small hidden state size might still be worse than the full hidden state with a conflict between decoding and providing information to downstream predicitons.
 
 ## Bringing it all together
 
