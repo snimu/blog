@@ -1,4 +1,4 @@
-# (Proposal) Multi Token Prediction by splitting hidden states
+# (Proposal) Multi Token Prediction by Splitting Hidden States
 
 I recently had a neat idea for Multi Token Prediction (MTP): splitting the output hidden states of our model into N chunks and predicting a different number of tokens ahead for each chunk using the same language head.
 
@@ -65,7 +65,7 @@ A second problem with this method is that it requires information about future t
 
 > Note: The advantage of using DeepSeek's MTP prediction during inference is of course a speedup: yes, we need to produce the tokens sequentially because the second prediction depends on the first, but we only have to do a forward pass on the full model once; afterward, it's a single normalization, linear projection, and one transformer layer, which is nothing.
 
-### Advantages of MTP by Splitting
+### Advantages of the Split MTP Method
 
 The split MTP method explicitly assigns different jobs to different parts of the output hidden state: predicting a different number of tokens ahead. This way, it avoids the issue of the hidden state having to contain both explicit information about the next token and enough abstract information to allow extracting tokens further down the line.
 
@@ -127,7 +127,7 @@ Of course, our great disadvantage remains: the hidden-state size per token is re
 
 Additionally, DeepSeek's method for MTP works with teacher forcing at every predicted token, while my method doesn't. Whether that's good or bad is unclear to me. Let's say S is the input sequence length. On the one hand, having the true token S+1 available for predicting token S+2 prevents an error cascade from prediction S+1 to prediction S+2. On the other hand, predicting token S+2 only from the hidden states that were produced from tokens 1 to S is closer to autoregressive prediction, which might be beneficial. And if my method doesn't work as presented above, it's possible to just append the embedding of the true token S+1 to h1 and c1 (or even train that way with a WSD schedule to get the model's error rate below some threshold, decay the learning rate, then remove the concatenated token S+1 and warm up again and train so that the model is brought closer to the downstream task of autoregressive prediction).
 
-## Summary and outlook
+## Summary and Outlook
 
 I have introduced a method for Multi Token Prediction (MTP) by splitting the output hidden state of a language model and using the same language head to predict a different future token from each of the chunks.
 
