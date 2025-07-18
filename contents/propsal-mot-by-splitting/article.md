@@ -39,18 +39,24 @@ I strongly suspect that this forces the model to implicitly learn what I want to
 
 #### DeepSeek's MTP
 
-DeepSeek's Multi-Token prediction makes a prediction ahead from the transformer hidden states. For the next token further, it then concatenates the input token at the current position, does a linear projection, applies a transformer block, and decodes the resulting hidden state with the same language head as the previous token. Then, that hidden state is again concatenated with the input token again, projected, and so on. See here:
+DeepSeek's Multi-Token prediction makes a prediction ahead from the transformer hidden states. For the next token further, it then concatenates the actual next token at the current position, does a linear projection, applies a transformer block, and decodes the resulting hidden state with the same language head as the previous token. Then, that hidden state is again concatenated with the input token again, projected, and so on. See here:
 
 ![DeepSeek MTP](images/mtp-deepseek.png)
 
+This means that the DeepSeek MTP method effectively *only* does next-token prediction, but multiple times per token; and only the first next-token prediction uses the full model, while the subsequent predictions use very cheap models (norm + FC + a single transformer block), and depend on the model's own previous predictions.
+
 This method is very strong and, let's be honest, is probably superior to what I'm proposing here. However, I still see an issue: The first predicted token is decoded directly by the language head *from the same hidden state that gets used for the further token predictions*. This forces one of two things to happen:
 
-1. The hidden state must contain information beyond what is relevant for the next token prediction (which is bad because that abstract information should in the middle of the transformer lest the language head has more difficulty decoding the hidden state)
-2. The prediction of the second next token is based only on the prediction of the first next token and the concatenated input token, which is very little information to go on
+1. The hidden state must contain information beyond what is relevant for the next token prediction (which is bad because that abstract information should in the middle of the transformer, or the language head will have more difficulty decoding the hidden state)
+2. The prediction of the second next token is based only on the prediction of the first next token and the concatenated actual next token
 
-Actually, the second option is likely very good for training dynamics, because 1) the output hidden state doesn't represent a single output token but a distribution over tokens and 2) having to make a good second-token-ahead prediction from the current token and the model's own prediction of the next-token-ahead forces the model to make that next-token-ahead prediction damn good.
+The second option is likely very good for training dynamics, because 1) the output hidden state doesn't represent a single output token but a distribution over tokens and 2) having to make a good second-token-ahead prediction from the actual next token and the model's own prediction of the next-token-ahead forces the model to make that next-token-ahead prediction damn good. I assume that in the extreme case where the hidden state is literally only an optimized superposition of tokens for the next token prediction, this second prediction would give another signal to make the probability distribution
 
 I definitely want a piece of that for my method, and will write about how to get it [further down](#catching-up-to-deepseek); my problem with the method is that the main transformer backend adds so little to all the token predictions except for the first one, because of the conflict between the hidden state used for the first prediction having to be useful for the first prediction, and thus being basically just a superposition of tokens, and having to be useful for the further predictions, which could use more abstract information (because they are using a transfomer block on it anyway).
+
+In other words, DeepSeek's MTP prediction works because it gives a very strong signal to optimize the immediate next-token prediction for downstream text. It would be nice if it also encouraged a strong abstract representation in the middle of the model more directly. To be clear, it probably does, because the hidden state probably contains a bunch of abstract information  to help the subsequent token predictions, but that has its own issues.
+
+A second problem with this method is that it requires information about future tokens to work. During inference, you don't know the actual next token; that's what you're generating! So you have to do what [_xjdr](https://x.com/_xjdr) does (if I remember correctly, I can't actually find the tweet to cite): Forward pass through the model, sample a next token, then predict the token after that with the MTP machinery and your predicted token. Of course, you do have those tokens available to you during training, where it can therefore certainly help with the training dynamics; still, this is a slight downer.
 
 ### Advantages of MTP by Splitting
 
@@ -92,6 +98,10 @@ Of course, this method can be combined with the [Project and Split](#project-and
 
 ### Catching Up to DeepSeek
 
+The great advantage of DeepSeek's MTP method is, as far as I can tell, that the next-next-token prediction relies on the model's own next-token prediction and can thus be backpropagated through both, which provides an additional training signal per token *for the next-token prediction*, making the next-token prediction stronger.
+
+
+
 - Split
 - Predict first token from first chunk (c1==h1)
 - Then concatenate first chunk and second chunk c2
@@ -104,3 +114,7 @@ Advantages:
 
 - Model can provide way more information to further-down tokens than prob distr and input tok
 - Predictions will always be backpropagated through the model more fully (put this better!)
+
+## Bringing it all together
+
+... Can use any combination of the above techniques: project-then-split and/or uneven-split, split earlier in the model, DeepSeek method for MTP
