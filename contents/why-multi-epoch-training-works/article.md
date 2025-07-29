@@ -4,12 +4,16 @@
 
 Given how often you hear that LLMs just memorize the training dataset, why do they benefit from being trained on the same data multiple times? (Note: I don't think that they just memorize the training data, but I'm still curious about the question.) Here's my answer.
 
-**Why epoch 2 is useful:** In a sense, training-batches are like tokens in a sequence during inference: the model can make use of the data it has already been updated on (past batches during training, past tokens in the sequence during inference) to contextualize the current information (the current batch or token), but not future information. Therefore, a lot of information can only be contextualized by the full training data, and thus all potentially relevant information, in epoch 2. Therefore, training for multiple epochs will help the LLM form a more complete world model.
+**Why epoch 2 is useful:** In a sense, training-batches are like tokens in a sequence during inference: the model can make use of the data it has already been updated on (past batches during training / past tokens in the sequence during inference) to contextualize the current information (the current batch / token), but not future information. Therefore, a lot of information can only be contextualized by the full training data, and thus all potentially relevant information, in epoch 2. Therefore, training for multiple epochs will help the LLM form a more complete world model.
 
 **Why we want a contextualized world model:** To demonstrate the importance of having contextualized information in the model itself, consider the case of LLMs using search engines:
 
 - If they have a lot of contextualized world knowledge, they aren't gullible and can distinguish good content from bad, even based on pretty small details
 - If they don't, they will fall for every SEO scam around, and those are almost always at the top of the results (that's their purpose)
+
+This is because in order to judge the truth of something, you need to have a bunch of related, known facts against which you can judge it. And those facts can only be used to check other facts when they themselves are somehow grounded (I would say the simplest set of facts that minimizes contradictions between all observations is what should be used as the best currently available world model, but that's neither here nor there). Therefore, 1) you need a set of facts to avoid gullibility, and 2) that set of facts must itself be contextualized to form a proper world model that doesn't consist of SEO cloaca.
+
+> Of course, sometimes we want the models to be gullible; I've often seen screenshots of chats where the LLM doesn't believe a true news story because it's so absurd (and while some of those screenshots are surely fake, I don't think all of them were). The models just acting along here is in conflict with them being able to push back against the user in other scenarios. And while googling will help in this case, it's the exact example that started this section. If the models don't already have a good world model, they are at risk of just loading more wrong facts into their memory. Multi-epoch training means that they effectively always have their entire dataset in memory (very roughly speaking), which helps models judge results.
 
 Generally, it's easier to understand a concept if you have mastered the pre-requisites, instead of stumbling randomly upon it with no prior experience in the field. The latter only really allows for memorization.
 
