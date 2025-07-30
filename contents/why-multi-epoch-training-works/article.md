@@ -25,7 +25,7 @@ Generally, it's easier to understand a concept if you have mastered the pre-requ
 
 Even having trained for two epochs, there might still be limitations to the contextualization, because:
 
-1. The first few training batches of epoch 1 might already so far in the past that they won't be used to contextualize the first few batches of epoch 2 because of unlearning of old data during training (and since we shuffle, the first batches of epoch 1 aren't the same as those from epoch 2, therefore the data in the former may be useful for learning the latter)
+1. The first few training batches of epoch 1 might already so far in the past that they won't be used to contextualize the first few batches of epoch 2 because of unlearning of old data during training
 2. At the start of epoch 1, the model is still pretty dumb, so it might not learn any abstract information that could be used for contextualization of newer data
 
 Both problems are solved by training for more epochs. Yes, they would also be solved by simply training on more non-repeated data as long as it contains some of the same facts, but that's not always available. The point is that training for multiple epochs will help the model understand a given dataset better, and is sometimes the only possible way to get more high-quality tokens. (Problem 2&mdash;the model being too dumb at the start of training&mdash;could maybe be softened by pre-pre-training on common token n-grams, a formal language, or other token sequences that can be auto-generated but are not missed when forgotten, but multi-epoch training is just such a simple solution if you have the compute)
