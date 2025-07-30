@@ -2,7 +2,7 @@
 
 *Quick thoughts about multi-epoch training; this is mostly a note to myself.*
 
-Why do LLMs benefit from being trained on the same data multiple times instead of overfitting catastrophically? Here's my (non-mathematical, not-rigorous) intuition for why this makes perfeft sense.
+Why do LLMs benefit from being trained on the same data multiple times? Here's my (non-mathematical, not-rigorous) intuition for why this makes perfeft sense.
 
 ## Why epoch 2 is useful
 
@@ -17,7 +17,7 @@ To demonstrate the importance of having contextualized information in the model 
 
 This is because in order to judge the truth of something, you need to have a bunch of related, known facts against which you can contrast it. And those facts can only be used to check other facts when they themselves are somehow grounded. Therefore, 1) you need a set of facts to avoid gullibility, and 2) that set of facts must itself be contextualized to form a proper world model.
 
-Of course, sometimes we want the models to be gullible; LLMs sometimes don't believe a true news story because it's so absurd and that's bad. In this situation, the models should just be acting along, but that's a behavior in conflict with them being able to push back against the user in other scenarios. And while googling could in principle help distinguish the two cases, it's the exact example that started this section. If the models don't already have a good world model, they are at risk of just loading more wrong facts into their memory. Multi-epoch training means that they effectively always have their entire dataset in memory (very roughly speaking), which helps them judge search results and pick the best ones.
+Of course, sometimes we want the models to be gullible; LLMs sometimes don't believe a true news story because it's so absurd and that's bad. In this situation, the models should just be acting along, but that's a behavior in conflict with them being able to push back against the user in other scenarios. And while googling could in principle help distinguish the two cases, it's the exact example that started this section. If the models don't already have a good world model, they are at risk of just loading more wrong facts into their memory. Multi-epoch training means that they effectively (very roughly speaking) always have their entire dataset in memory (in a highly compressed and noisy form), which helps them judge search results and pick the best ones.
 
 Generally, it's easier to understand a concept if you have mastered the pre-requisites, instead of stumbling randomly upon it with no prior experience in the field. The latter only really allows for memorization.
 
@@ -30,13 +30,11 @@ Even having trained for two epochs, there might still be limitations to the cont
 
 Both problems are solved by training for more epochs. Yes, they would also be solved by simply training on more non-repeated data as long as it contains some of the same facts, but that's not always available. The point is that training for multiple epochs will help the model understand a given dataset better, and is sometimes the only possible way to get more high-quality tokens. (Problem 2&mdash;the model being too dumb at the start of training&mdash;could maybe be softened by pre-pre-training on common token n-grams, a formal language, or other token sequences that can be auto-generated but are not missed when forgotten, but multi-epoch training is just such a simple solution if you have the compute)
 
-## Random sampling vs. curriculum learning
+## On random sampling
 
-The same arguments about multi-epoch training helped me build intuition on why randomly sampled batches work so well, and on one thing that might work for curriculum learning.
+The same arguments about multi-epoch training helped me build intuition on why randomly sampled batches work so well.
 
 Randomly sampled batches benefit from mostly containing non-related samples within one batch, because a model cannot contextualize one sample in a batch with another sample in the same batch. Random sampling makes it likely that related information is presented in separate batches and can thus build upon itself.
-
-For curriculum learning, this implies that it's better if related concepts and information are spread out over the batches rather than collecting them into a single batch each. It might be even better to keep related texts in different but adjacent batches (or maybe do that in the first batch then spread them out in subsequent batches? Or the other way around? I could come up with an explanation for both of these being better than the other so I don't actually know). This entire section is quite speculative though.
 
 ## Small-batch training
 
