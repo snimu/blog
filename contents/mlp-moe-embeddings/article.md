@@ -1,7 +1,5 @@
 # [Note to Self] An MLP is an embedding layer, an MoE a sparse one
 
-> This is mostly a note to myself, containing information that is obvious to many but that I have just figured out. I hope it still helps others.
-
 A Multi Layer Perceptron (MLP) is an approximation of an embedding layer, and a Mixture of Experts (MoE) is a closer, sparser one.
 
 Table of Contents:
