@@ -81,17 +81,17 @@ The problem is that we cannot simply predict frame `n+8` from frames and actions
 
 They predict tokens `2:n+1` in parallel from tokens `1:n`. Then, they take the output hidden state of the model at these positions, and concatenate them with the actual tokens `2:n+1` along the model dimension. They project downward to the model dimension apply another transformer layer to predict tokens `3:n+2` from that. Repeat for subsequent tokens. I'd adapt this architecture in the following way:
 
-...
+![DeepSeek MTP architecture for multi-frame prediction](images/multi-frame-prediction-deepseek.png)
 
-It's the same thing: from a sequence of (action-conditioned) video tokens, produce a sequence of video tokens. Literally no changes are required.
+It's the same thing: from a sequence of (action-conditioned) video tokens, produce a sequence of video tokens. The only changes that are required are to replace the embedding layer with the Video Tokenizer and Latent Action Model, and using a different Output Head for predictions at different resolutions (because I think those require different video tokens, and thus different distributions over the tokens for the same scene).
 
 However, I would definitely at least experiment with the following change: instead of providing the full action-conditioned video tokens `2:n+1` for the prediction of video token `n+2`, provide only the action-conditioned video tokens `2:n`, plus the action at time `n+1`.
 
 Since the actions modify the video tokens via addition, all actions `n+1:n+k-1` could simply be added to the hidden state at position `n` (from which prediction `n+1` is made), and the result appended to the action-conditioned video tokens `k:n`. Then, the prediction of token `n+k` requires only `n+1` input tokens, which is obviously an advantage. It also no longer allows the model to rely on frame `n+k-1` to predict frame `n+k`; instead, it must make that prediction from the actions and frames `1:n` and the actions `n+1:n+k-1` only. It makes intuitive sense to me that that would encourage learning scene dynamics much more strongly; and, additionally, learning the meaning of actions more strongly. And if I'm wrong, well the base-case of using action-conditioned video tokens everywhere is still available.
 
-There is one additional detail that I would try: using an earlier hidden state than the last one as the shared representation for multi-frame prediction:
+There is one additional detail that I would try: using an earlier hidden state than the last one as the shared representation for multi-frame prediction (I'm showing just one of multiple possibel variations a creative person can come up with):
 
-...
+![Multi-frame prediction with earlier shared hidden layer](images/multi-frame-prediction-deepseek-early-split.png)
 
 That would allow for two things:
 
