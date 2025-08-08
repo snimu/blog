@@ -2,7 +2,7 @@
 
 Video models often struggle with scene consistency over long periods of time, and with natural-looking movements. In this post, I will discuss two possible solutions to the problem: Predicting multiple frames out with frame-skips, and making the targets for all predictions but the immediate next one lower in resolution.
 
-Because they are more interesting to me, I will focus on a variation of video models: "world-models" like Google's recently announced [Genie 3](https://deepmind.google/discover/blog/genie-3-a-new-frontier-for-world-models/) that additionally take action-inputs into account.
+Because they are more interesting to me, I will focus on a variation of video models: "world-models" like Google's recently announced [Genie 3](https://deepmind.google/discover/blog/genie-3-a-new-frontier-for-world-models/) that additionally take action-inputs into account. I will suggest a possible Architecture to incorporate action inputs into my suggested upgrades to video-model training.
 
 ## The issue
 
@@ -77,15 +77,19 @@ To combine the video and action tokens, they simply add the two together (the ac
 
 The problem is that we cannot simply predict frame `n+8` from frames and actions `1:n`, because it depends on the actions `n+1:n+7`. Therefore, we need to provide those actions to the model for it to make a concrete multi-frame prediction instead of an average prediction over many possible action trajectories. The solution for how to do that comes from the [DeepSeek V3 Technical Report](https://arxiv.org/abs/2412.19437). Here is their multi-token prediction architecture:
 
+![DeepSeek V3 Multi Token Prediction Architecture](images/deepseek_mtp.png)
+
+They predict tokens `2:n+1` in parallel from tokens `1:n`. Then, they take the output hidden state of the model at these positions, and concatenate them with the actual tokens `2:n+1` along the model dimension. They project downward to the model dimension apply another transformer layer to predict tokens `3:n+2` from that. Repeat for subsequent tokens. I'd adapt this architecture in the following way:
+
 ...
 
-They predict token `n+1` from tokens `1:n`. Then, they take the output hidden state of the model, and concatenate it with token `n+1` along the model dimension, project downward to the model dimension, and append it to the original input sequence `1:n`. Then, they apply another transformer layer, and predict token `n+2` from that. Repeat for subsequent tokens. I'd adapt this architecture in the following way:
+It's the same thing: from a sequence of (action-conditioned) video tokens, produce a sequence of video tokens. Literally no changes are required.
 
-...
+However, I would definitely at least experiment with the following change: instead of providing the full action-conditioned video tokens `2:n+1` for the prediction of video token `n+2`, provide only the action-conditioned video tokens `2:n`, plus the action at time `n+1`.
 
-I would predict the next frame from the combined frame and action tokens at positions `1:n`. While it's possible to supply the action-conditioned frames `1:n+k-1` when predicting frame `n+k`, and concatenating prediction `n+k-1` with the actual action-conditioned frame `n+k-1`, then projecting down and appending to the action-conditioned frames `1:n+k-2`, I actually prefer only providing the action-conditioned frames `1:n` and then appending only the actions `n+1:n+k-1`. That could be done by simply adding all the actions on top of the output hidden state, and then appending this multi-action-conditioned hidden state to the action-conditioned frames `1:n`. That would be cheaper, simpler, and I feel like it would force the model to make an actual multi-frame prediction, but conditioned on the intermediate actions, instead of relying heavily on the actual next frames as input. However, I might be wrong, in which case we could simply switch to providing full action-conditioned frames for far-out frame predictions.
+Since the actions modify the video tokens via addition, all actions `n+1:n+k-1` could simply be added to the hidden state at position `n` (from which prediction `n+1` is made), and the result appended to the action-conditioned video tokens `k:n`. Then, the prediction of token `n+k` requires only `n+1` input tokens, which is obviously an advantage. It also no longer allows the model to rely on frame `n+k-1` to predict frame `n+k`; instead, it must make that prediction from the actions and frames `1:n` and the actions `n+1:n+k-1` only. It makes intuitive sense to me that that would encourage learning scene dynamics much more strongly; and, additionally, learning the meaning of actions more strongly. And if I'm wrong, well the base-case of using action-conditioned video tokens everywhere is still available.
 
-One additional detail I would at least experiment with is using an earlier hidden state than the last one as the shared representation for multi-frame prediction:
+There is one additional detail that I would try: using an earlier hidden state than the last one as the shared representation for multi-frame prediction:
 
 ...
 
