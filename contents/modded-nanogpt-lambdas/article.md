@@ -24,7 +24,7 @@ The following layers are connected:
 
 This makes for three scalar values that are optimized for the entire model. Here is their development over the course of training:
 
-![U-Net Lambdas](images/unet-lambdas.png)
+![U-Net Lambdas](images/unet_lambdas.png)
 
 I find it interesting that the amount of layer-skipping at the end of training is very significant:
 
