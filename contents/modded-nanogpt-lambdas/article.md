@@ -120,11 +120,11 @@ The value embeddings are embedding layers beside the one that forms x0. Their em
 
 However, that is only the case in the first and last three layers. In between, only `ve_lambdas[0]` is used to scale the Values, while `ve_lambdas[1]` remains unchanged over training. And at layer 7, there is no attention, so there are no such lambdas.
 
-To add more complexity, the value embeddings of the first and last three layers are shared; so layers 0 and 13, layers 1 and 14, and layers 2 and 15 share the same value embeddings. This saves parameters and ensures that there is a short gradient path from the loss to the value embeddings. While additional gradient comes from the first layer which are the farthest away from the input, there is always gradient from the three layers nearest to the loss, too.
+To add more complexity, the value embeddings of the first and last three layers are shared; so layers 0 and 13, layers 1 and 14, and layers 2 and 15 share the same value embeddings. This saves parameters and ensures that there is a short gradient path from the loss to the value embeddings. While additional gradient comes from the first three layers which are the farthest away from the input, there is always gradient from the three layers nearest to the loss, too.
 
-I admit that I only have some very weak intuitions for why value embeddings help. I've long held that token embeddings are a way to hold training-set wide statistics about the byte-sequence represented by the token, so I'm guessing that they add a way for the model to store more static per-token statistics which are helpful. However, that's 100% speculation and you shouldn't take it too seriously, I'm just "thinking aloud" (in my writing).
+I admit that I only have some very weak intuitions for why value embeddings help. I've long held that token embeddings are a way to hold training-set wide statistics about the byte-sequence represented by the token, so I'm guessing that they add a way for the model to store more static per-token statistics which are helpful. Another viewpoint on this is that at least the value embeddings at the last three layers effectively reduce the model depth again. However, that's 100% speculation and you shouldn't take it too seriously.
 
-I will again plot the final values of these lambdas over the layers; however, this time both the absolute and the relative values are of interest. The absolute values are specifically interesting for the layers in which there are no value-embeddings, but the v-lambda is sitll used to scale the values. The normed values are particularly interesting (at least in my eyes) for the layers where values embeddings are applied, and we want to see how strongly they are mixed in relative to the values.
+I will again plot the final values of these lambdas over the layers; however, this time both the absolute and the relative values are of interest. The absolute values are specifically interesting for the layers in which there are no value-embeddings but the v-lambda is still used to scale the values. The normed values are particularly interesting (at least in my eyes) for the layers where values embeddings are applied, because I'm interested in their weight relative to the values.
 
 So here is the plot with the absolute values:
 
@@ -138,9 +138,9 @@ Some observations about the layers without value embeddings:
 
 Some observations about the layer with value embeddings:
 
-- The v-lambdas always increase, though not as much as without value embeddings
+- The v-lambdas are significantly larger than at initialization, though not as much as without value embeddings
 - The ve-lambdas stay very low, except in the last layer
-- The ratio of v-lambdas to ve-lambdas is much higher in the first than the last layers; the value embeddings seem to have little impact on the first few layers (numberially, they could still stabilize training, or add just enough to make a difference, or whatever)
+- The ratio of v-lambdas to ve-lambdas is much higher in the first than the last layers; the value embeddings seem to have little impact on the first few layers (numerically, they could still stabilize training, or add just enough to make a difference, or whatever, but this only adds to the high magnitudes of x and x0 from the [x0-lambdas](#x0-lambdas)).
 
 To make more sense of that last point especially, let's look at the normalized ve-lambdas:
 
@@ -154,10 +154,9 @@ Three clear groups emerge:
 
 The last point is very interesting, because as we saw before, the last layer already mixes the original embeddings into the residual stream at its input with about 50% magnitude. That's a lot of fixed values that don't depend on the token-order at all!
 
-Finally, below you can expand a section to see the full details over training, for those who like to look at plots all day.
+---
 
-<details>
-<summary>Per-layer ve-lambdas over training</summary>
+Let's look at the lambdas over the course of training again.
 
 First the normalized values:
 
@@ -166,14 +165,18 @@ First the normalized values:
 ![ve-lambdas normed, layers 8-11](images/ve_lambdas_8-11_normed.png)
 ![ve-lambdas normed, layers 12-15](images/ve_lambdas_12-15_normed.png)
 
-And, for the sake of completeness, here are the un-normed values:
+In the layers without value embeddings, the magnitude of the attention-values rises very quickly and never reverses course.
+
+But in the layer *with* value embeddings, only layers 0 and 1 behave similarly. For layers 2 and 13-15, the value embeddings first gain in relative importance before losing it again. The later the layer, the later this reversal happens.
+
+And here are the un-normed values:
 
 ![ve-lambdas un-normed, layers 0-3](images/ve_lambdas_0-3.png)
 ![ve-lambdas un-normed, layers 4-7](images/ve_lambdas_4-7.png)
 ![ve-lambdas un-normed, layers 8-11](images/ve_lambdas_8-11.png)
 ![ve-lambdas un-normed, layers 12-15](images/ve_lambdas_12-15.png)
 
-</details>
+In all layers, the `v_lambdas` rise over most of training, before slightly falling toward the end.
 
 ## Summary
 
