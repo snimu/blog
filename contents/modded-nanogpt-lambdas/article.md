@@ -79,7 +79,9 @@ For this, it's also very important that both crossovers happen at the same time,
 1. The interaction with x0 changes
 2. At layers 8 and 15, the impact of x falls to 0 and then rises again
 
-A second phenomenon is that the impact of x rises over most of training, and then falls again at the end, *in every single layer* but the first (where it doesn't matter). This tends to happen earlier than the crossover of `x_lambda` into negative values in layers 8 and 15.
+It's also noteable that layer 14 is the only other layer in which the impact of x0 exceeds the impact of x at the end of training. It's especially interesting because that's how it starts, but for a large part of the middle of training, the inverse is true.
+
+A third phenomenon is that the impact of x rises over most of training, and then falls again at the end, *in every single layer* but the first (where it doesn't matter). This tends to happen earlier than the crossover of `x_lambda` into negative values in layers 8 and 15.
 
 I wonder how these dynamics are connected to the learning rate schedule and the sequence length schedule (modded-nanogpt uses a block mask that increases in size over the course of training). So here is a plot of the learning rate and sequence length, relative to their absolute values (so normalized to between 0 and 1):
 
@@ -90,7 +92,10 @@ The learning rate is constant for the first ~2000 steps, then falls linearly to 
 And that is indeed very meaningful!
 
 - The impact of x stops rising relative to x0 right around the time when the learning rate begins decaying, and the sequence length becomes constant
-- The `x_lambda` crossover happens right after the sequence length begins increasing again
+- In layer 14, x0 becomes more important than x right after the sequence length begins increasing again
+- The `x_lambda` crossover happens shortly after that, which makes it look like it is also connected to the sequence length schedule
+
+Especially the second and third point are curious to me. Is the solution for dealing with sequence length extension to focus more strongly on x0?
 
 I don't know how meaningful these are, and how consistent they happen over different training runs, but the close relationship between hyperparameters and x0-lambdas make me think that there are real phenomena here.
 
@@ -105,7 +110,7 @@ One interesting phenomenon is that the early layers tend to have higher absolute
 
 But it might also be connected with the [value embeddings](#value-embeddings-lambdas), which are applied to the first and last three layers. High x- and x0-magnitudes in the first three layers suppress the relative impact of the value embeddings, while low magnitudes in the last layers will keep them high. But let's re-visit this later.
 
-Layers 8 and 15 are the layers with the lowest `x_lambda` and `x0_lambda`.
+Layers 8 and 15 are the layers with the lowest `x_lambda` and `x0_lambda`. I'm not sure what that means, just wanted to point it out.
 
 ## Value-Embeddings Lambdas
 
