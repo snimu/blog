@@ -12,9 +12,11 @@ This is for the code as of August 9th, 2025, corresponding to [this record log](
 
 ## U-Net Lambdas
 
-The model mixes the activations at position `a` into those at the later position `b` in the following way: `x_b = x_b + lambda_ab * x_a`. This is very similar to a U-Net, so I'll call them the U-Net Lambdas.
+The model mixes the activations at position `a` into those at the later position `b` in the following way: `x_b = x_b + lambda_ab * x_a`.
 
-They shorten the gradient path from the output to the input (they are residual connections skipping multiple layers), and are initialized to 1.0, which means that the model is initialized to have a short effective depth, which only grows over time, and that the value of the lambda at the end of training is equivalent to a skip percentage during inference.
+These U-Net lambdas shorten the gradient path from the output to the input (they are residual connections skipping multiple layers), and are initialized to 1.0, which means that the model is initialized to have a short effective depth (or more accurately, that the middle layers contribute fairly little).
+
+In a way, the value of the U-Net lambdas is a skip percentage. If a lambda is at 1, the layers that it crosses are skipped by 50%; if they are 0, they are skipped 0%. I'm sure that there are also different ways to look at these lambdas, but this is the most intuitive way to me.
 
 The following layers are connected:
 
@@ -26,16 +28,14 @@ This makes for three scalar values that are optimized for the entire model. Here
 
 ![U-Net Lambdas](images/unet_lambdas.png)
 
-I find it interesting that the amount of layer-skipping at the end of training is very significant:
+I find it interesting that the amount of layer-skipping at the end of training is still very significant:
 
-- Layers 0-2 and 11-15 are never skipped
-- Layers 3-10 are skipped by ~39%
-- Among those, layers 4-9 are skipped by 50%
-- And then among those, layers 6-8 are skipped by ~31%
+- Layers 0-2 and 11-15 are never skipped (by design)
+- Layers 3-10 are skipped by ~0.4 / 2 &rarr; 20%
+- Nested within them, layers 4-9 are skipped by 0.5 / 2 &rarr; 25%
+- And then among those, layers 6-8 are skipped by ~0.3 / 2 &rarr; 15%
 
 The middle layers contribute relatively little to the output! Of course, that can be made up for by scaling the norm of the middle-layer outputs (which I unfortunately didn't measure), but my guess is that it's meaningful.
-
-> Sidenote: making these lambdas data-dependent could allow the model to dynamically choose to make more use of the middle layers for some problems, and less for others. While that wouldn't save compute in this architecture, it would give the model more algorithmic flexibility. Might be worth a try, though it's likely too expensive to make for a record, and may not even help.
 
 ## X0-Lambdas
 
