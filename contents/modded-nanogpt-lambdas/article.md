@@ -41,7 +41,7 @@ The middle layers contribute relatively little to the output! Of course, that ca
 
 At every layer of the model, there are two scalars used for mixing the input embeddings `x0` into the residual stream in a weighted sum: `x = x_lambda * x + x0_lambda * x0`.
 
-I don't fully understand the purpose of this modification to the standard transformer architecture. It definitely makes for a very short gradient path to the input, and also provides a gradient to the input embeddings from every layer, speeding up their training (in the backward pass, the layers effectively act as data augmentations to the gradient, which allows for longer training with the same data and will thus be helpful for updating the embeddings).
+I don't fully understand the purpose of this modification to the standard transformer architecture. It definitely makes for a very short gradient path to the input, and also provides a gradient to the input embeddings from every layer, speeding up their training. In the backward pass, the layers effectively act as data augmentations to the gradient, which allows for longer training with the same data and will thus be helpful for updating the embeddings. But I don't feel like that's the full story.
 
 I have recorded the x0-lambdas for all layers over the entirety of training. Plotting all of these is very ugly, so here for my main plot I only show the final value of the x0-lambdas over the model's layers, normed so that they sum to 1 (because we care about their relative weight):
 
@@ -51,16 +51,17 @@ I can see three points of interest:
 
 First, the lambdas are almost identical in layer 0. That makes sense, because in layer 0 (and only in layer 0), `x == x0`.
 
-Secondly, at layer 8, the sign is flipped. That isn't very meaningful except that the parameter had to learn to cross 0. What is interesting is that the x0-lambda is noticeably higher here than in the other layers (except for the last). That may be chance, but it may also be a result of the previous layer skipping the attention layer. It would seem that layer 7 contributes less to the model than the other layers, and is thus overwritten more strongly with x0. That's pure speculation though.
+Secondly, at layer 8, the sign of the `x_lambda` is flipped. To reach this point, it has to cross 0! So at some point in training, layer 7 is almost completely ignored. Note the interaction with the U-Net lambdas: layers 7, 8, and 9 are skipped pretty strongly anyway, so the computation from previous layers isn't ignored even when the `x_lambda` were 0 at some point.
 
-Lastly, the last layer has a very large x0-lambda, almost 80% of the input to layer 15 consists of the input embeddings (which is again achieved by the x-lambda crossing 0 and becoming negative). That makes me think that the final calculation is a simple embeddings calculation, like the stereotypical "king - man + woman = queen"; the transformer simply calculates the difference between the input and target embeddings. That is a common view, but it's shown strongly here (and it also demonstrates the related view that the transformer is a learned gradient estimator).
+What is also interesting is that the x0-lambda is noticeably higher in layer 8 than in the other layers (except for the last). That may be chance, but it may also be a result of a specific architectural decision: layer 7 doesn't contain an Attention layer, only the MLP. This weakly suggests that layer 7 contributes less to the model than the other layers, and is thus overwritten more strongly with x0.
 
-But what it also does is reveal a second purpose of the x0-lambdas: they allow the model to compare the residual&mdash;meaning, in abstract terms, the vector it plans to add to the input embeddings&mdash;to the input to which it will be added, and adjusting accordingly. That's a bit imprecise, but it helps my intuition.
+Lastly, the last layer has a very large x0-lambda, almost 80% of the input to layer 15 consists of the input embeddings (which is again achieved by the x-lambda crossing 0 and becoming negative). That makes view the final calculation as a simple embeddings calculation, like the stereotypical "king - man + woman = queen"; the transformer simply calculates the difference between the input and target embeddings. That is a common view of transformers, but it's accentuated in modded-nanogpt.
 
-For those who want all the details, you can extend the below section to see the x0-lambdas over the layers *and* over the course of training.
+It also reveals a second purpose of the x0-lambdas: they allow the model to compare the residual&mdash;meaning, in abstract terms, the vector it plans to add to the input embeddings&mdash;to the input to which it will be added, and adjusting accordingly. That's a bit imprecise, but it helps my intuition. It reminds me of the [Hierarchical Reasoning Model](https://arxiv.org/abs/2506.21734), where (a function of) x0 is regularly used to guide the generations of the main model.
 
-<details>
-<summary>Per-layer x0-lambdas over training</summary>
+---
+
+Now, let's look at the x0-lambdas over the layers *and* over the course of training.
 
 First the normalized values:
 
@@ -69,14 +70,42 @@ First the normalized values:
 ![x0-lambdas normed, layers 8-11](images/x0_lambdas_8-11_normed.png)
 ![x0-lambdas normed, layers 12-15](images/x0_lambdas_12-15_normed.png)
 
-And, for the sake of completeness, here are the un-normed values:
+What immediately jumps out to me is that the lambdas develop very smoothly in all layers *except* in layers 8 and 15. But of course, this irregularity just comes from the `x_lambda` crossing the 0-point. More interesting is that the `x_lambda` first grows relative to the `x0_lambda`, before dropping off a cliff and crossing over into negative territory.
 
-![x0-lambdas un-normed, layers 0-3](images/x0_lambdas_0-3.png)
-![x0-lambdas un-normed, layers 4-7](images/x0_lambdas_4-7.png)
-![x0-lambdas un-normed, layers 8-11](images/x0_lambdas_8-11.png)
-![x0-lambdas un-normed, layers 12-15](images/x0_lambdas_12-15.png)
+It's also curious to me that the crossover into negative values happens so late in training. In a static setting, I would say that inverting the sign of an activation isn't a huge deal, because this can be made up for with the weights. But in this case, the weights were adapted to a positive `x_lambda` most of the training run. In that case, inverting the sign *is* meaningful, and it reminds me of embeddings-math again.
 
-</details>
+For this, it's also very important that both crossovers happen at the same time, so the two mostly make up for each other. The effects of the crossover of `x_lambda` to negative values are therefore twofold:
+
+1. The interaction with x0 changes
+2. At layers 8 and 15, the impact of x falls to 0 and then rises again
+
+A second phenomenon is that the impact of x rises over most of training, and then falls again at the end, *in every single layer* but the first (where it doesn't matter). This tends to happen earlier than the crossover of `x_lambda` into negative values in layers 8 and 15.
+
+I wonder how these dynamics are connected to the learning rate schedule and the sequence length schedule (modded-nanogpt uses a block mask that increases in size over the course of training). So here is a plot of the learning rate and sequence length, relative to their absolute values (so normalized to between 0 and 1):
+
+![modded-nanogpt learning rate and sequence length over training](images/hparams_lr-and-seq-len.png)
+
+The learning rate is constant for the first ~2000 steps, then falls linearly to 0. The sequence length rises to half its maximum in the first ~2000 steps, then remains constant for ~2000 steps, before rising again in the last ~2000 steps.
+
+And that is indeed very meaningful!
+
+- The impact of x stops rising relative to x0 right around the time when the learning rate begins decaying, and the sequence length becomes constant
+- The `x_lambda` crossover happens right after the sequence length begins increasing again
+
+I don't know how meaningful these are, and how consistent they happen over different training runs, but the close relationship between hyperparameters and x0-lambdas make me think that there are real phenomena here.
+
+Now let's look at the absolute values:
+
+![x0-lambdas absolute, layers 0-3](images/x0_lambdas_0-3.png)
+![x0-lambdas absolute, layers 4-7](images/x0_lambdas_4-7.png)
+![x0-lambdas absolute, layers 8-11](images/x0_lambdas_8-11.png)
+![x0-lambdas absolute, layers 12-15](images/x0_lambdas_12-15.png)
+
+One interesting phenomenon is that the early layers tend to have higher absolute values than the later ones, so the impact of early layers is accentuated beyond the U-Net connections. Taking the U-Net connections into account, this means thats the effective model depth is shortened again, and middle layers add their algorithmic complexity in more subtle ways.
+
+But it might also be connected with the [value embeddings](#value-embeddings-lambdas), which are applied to the first and last three layers. High x- and x0-magnitudes in the first three layers suppress the relative impact of the value embeddings, while low magnitudes in the last layers will keep them high. But let's re-visit this later.
+
+Layers 8 and 15 are the layers with the lowest `x_lambda` and `x0_lambda`.
 
 ## Value-Embeddings Lambdas
 
