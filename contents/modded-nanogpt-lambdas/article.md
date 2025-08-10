@@ -6,7 +6,9 @@ The [modded-nanogpt](https://github.com/KellerJordan/modded-nanogpt/tree/master)
 - X0-Mixin: At every layer, after the U-Net skip (if it occurs at that layer) but before Attention and the MLP, the current residual and the original input embeddings are mixed in a weighted sum
 - Value-Embeddings: In each Attention layer, value embeddings (extra embeddings of the input tokens) are added to the Value vector before the actual Attention operation is applied
 
-I have measured and plotted the weights of these weighted sums. In this article, I will go through all three tricks, first explaining them shortly and then plotting the learned lambdas over training, and over the layers where it makes sense. Warning: these are all from a single training run, so variations are possible.
+I have measured and plotted the weights of these weighted sums. In this article, I will go through all three tricks, first explaining them shortly and then plotting the learned lambdas over training, and over the layers where it makes sense. I find several interesting phenomena, like how much the impact of middle layers is suppressed, or how the lambdas are connected to the learning rate and sequence length schedules.
+
+> Warning: these are all from a single training run, so variations are possible.
 
 This is for the code as of August 9th, 2025, corresponding to [this record log](https://github.com/KellerJordan/modded-nanogpt/blob/master/records/042225_GPT2Medium_Record8/075_640429f2-e726-4e83-aa27-684626239ffc.txt).
 
