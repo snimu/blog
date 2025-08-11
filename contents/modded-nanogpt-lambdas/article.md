@@ -12,6 +12,8 @@ I have measured and plotted the weights of these weighted sums; the lambdas. In 
 
 This is for the code as of August 9th, 2025, corresponding to [this record log](https://github.com/KellerJordan/modded-nanogpt/blob/master/records/042225_GPT2Medium_Record8/075_640429f2-e726-4e83-aa27-684626239ffc.txt).
 
+You can find the code [here](https://github.com/snimu/modded-nanogpt-experiments/tree/main/experiments/00001-lambdas).
+
 ## U-Net Lambdas
 
 The model mixes the activations at position `a` into those at the later position `b` in the following way: `x_b = x_b + lambda_ab * x_a`.
