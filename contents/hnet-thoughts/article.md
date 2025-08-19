@@ -187,4 +187,8 @@ This would probably enable us to build a slider that continually increases compu
 
 ### Chunking with more comparisons
 
-... They show that predicting boundaries from single bytes is worse than predicting them from the comparison between byte pairs. So why not extend this? ...
+The way the boundaries between bytes (or higher level tokens in multi-stage H-Nets) are determined is by applying two linear layers to the output of the encoder: `W_k` and `W_q`. These produce the keys and queries, and a similarity score is calculated from the dot-product of these two, normalized to between 0 and 1. This is the boundary probability, and if it's above 0.5, a boundary is drawn.
+
+As a baseline comparison, the authors try to predict the boundary probability from a single byte each. They don't specify how exactly they do this, but I suspect that they simply produce a score directly from the byte embeddings with a linear layer. This works worse than predicting the boundary probability via a comparison between the current and the previous byte. So naturally, I wonder if taking even more bytes into account would make this even better.
+
+I suspect not, or at least not by much; but it should be worth a try.
