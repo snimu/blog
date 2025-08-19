@@ -20,6 +20,8 @@ That's a perfect setup for late interaction RAG (LINK):
 - We can do a sort of hybrid search, where we search for very abstract, semantic similarity with some vectors, and more lexigraphic similarity with others
 - And that might be used to improve efficiency: the abstract vectors are much smaller than the ones closer to the bytes, so doing late interaction with them is much cheaper. This can be taken advantage of by first filtering out all chunks that aren't a semantic fit, and then searching with more granularity among the remainder. And of course, this  can be done in multiple stages if the hierarchy of the H-Net is deep enough
 
+It's effectively a set of Matryoshka embeddings (LINK), but along the sequence dimension instead of the model dimension.
+
 ### Dynamic chunking as a tool for science
 
 The authors have shown that H-Net is amazing as a DNA model. A model that is great at predicting DNA and performing downstream tasks on it is of course very useful (and such an H-Net could be used for embedding search over DNA chunks, [see above](#h-net-as-an-embedding-model)), but there's more:
@@ -28,7 +30,7 @@ If the model has multiple levels of abstraction, it will will dynamically merge 
 
 It might actually make sense to train multiple H-Nets with different initializations and data order on overlapping sets of DNA data (and whatever other modifications you can think of), then comparing the groupings of base pairs (and of more abstract concepts down the hierarchy) between them. Where these grouping overlap, we might find universally meaningful, context-dependent chunks of base pairs which could turn out to be very useful for the field of biology in their own right.
 
-Of course, the same should be possible with a lot of other domains as well, making this a very broad tool for science.
+As a concrete example, imagine a model pre-trained on lots of DNA, then post-trained to predict the risk of different diseases based on a person's genes. If this model is an H-Net, could we give it the genome of an afflicted person, and see how it's chunked compared to non-afflicted people's genes, to identify the genes that are risk factors? Obviously, we'd need moe than one person for this, but this could work as a fairly universal interpretability tool for science. And of course, this isn't limited to DNA models.
 
 ## Thoughts on the architecture
 
