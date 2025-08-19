@@ -139,3 +139,74 @@ They determine that Mamba is better, because it's better at compressing the loca
 Therefore, I suggest placing a transformer layer with a sliding window on the residual, not a Mamba layer. We don't use the residual's output to chunk anything, so all we're looking for is maximum expressiveness, which attention + MLP provide.
 
 Of course, we can additionally replace the MLP with a sparse MoE, making the layer even more expressive at the same cost.
+
+### Latent Looping
+
+I have several ideas for how to incorporate latent looping into the H-Net, which I think could have multiple advantages. However, I'm hitting the limits of my knowledge very quickly, so the section is somewhat meandering and too speculative even for my taste. I will keep it in, but not as part of the main article.
+
+<details>
+<summary>Expand this if you are still interested in my thoughts on latent looping for the H-Net</summary>
+
+I believe that the main module of the H-Net is an attractive target for latent looping a là [Geiping et al.](...) (LINK) and could provide three potential benefits:
+
+- Reduce the variance of memory and compute requirements during training and inference, which are a huge remaining problem of the method
+- Handle difficult sections more gracefully
+- Encourage more compression
+
+We will go through each of these points one by one, but first, let me quickly explain what I mean by latent looping. I would treat the encoder and decoder like the Prelude and Coda of [Geiping et al.](...) (LINK), and the main module like the recurrent unit:
+
+TODO: IMAGE (of Geiping architecture)
+
+That requires some singificant changes to the architecture, but they are consistent with the hierarchical setup and the dynamic chunking. Whether or not it actually works better than the original is a different question entirely, but since [Geiping et al.](...) (LINK) seem to perform pretty well, there is at least some chance that it does.
+
+And it does have one advantage that is very specific to the H-Net: being a counterweight to the variance in compute- and memory-requirements of the H-Net.
+
+#### Reducing the variance of compute- and memory-requirements
+
+> I have gone through multiple iterations of the ideas in this section, which I'll keep in the order in which I've had them to show multiple approaches that wouldn't work, and why they wouldn't work.
+
+The fact that the H-Net determines token boundaries dynamically means that two sequences of the same length might require very different amounts of memory and compute if one of them is compressed more strongly than the other. The compression ratio of course increases over the course of training, but it will vary almost randomly from batch to batch. If this variance is small, it's not a big issue, but if it's big, then it is. That's because a large variance in compute and memory needs requires you to plan for the least efficient batch possible (or you'll get an Out Of Memory Error, which is very bad). But that means that for most batches, you will have poor GPU usage.
+
+With latent looping, we can make up for that: just loop the main model more often when compression is high, and less often when it is low. If this is done right, it could almost completely make up for compute- and memory-variance by keeping compute per sequence constant.
+
+The problem with this approach is that keeping compute per sequence constant is contra the entire point of the H-Net (or at least its main selling point): When a sequence is simple and thus highly compressible, we *want to* spend less compute on it than if it's difficult.
+
+So instead, we could use the following approach:
+
+- Decide on a baseline number of loops, for example 5
+- Depending on the average compression in the current batch, we vary this number up or down
+- If it's varied to a non-integer number, we can approximate it
+
+Like in [Geiping et al.](...) (LINK), it would make sense to slowly increase the baseline number over the course of training while reducing the batch size, but that's highly controllable and thus not a problem.
+
+#### Handling difficult sections more gracefully
+
+...
+
+#### Encouraging more compression
+
+...
+
+#### What should we focus on?
+
+... probably on the first point, because it's the biggest limiting factor
+
+#### Inference with latent looping
+
+... can use yet another variable to decide when to stop looping during inference: the similarity between activations from one interation to the next, as done in [Geiping et al.](...) (LINK).
+
+- Latent looping of model
+  - Scaling the number of loops in one of two ways:
+    1. if p is close to 1.0, increase the number of loops
+        - Increasing compute to this token is already taken care of by the smoothing module, by making the next token also consider this token
+        - In other words, the higher the probability of a token boundary, the closer to the capacity limit the model *should be* for that token
+          - &rarr; needs more compute for tokens with very certain boundaries than uncertain ones
+          - &rarr; doing it this way would also allow the model to make the tokens larger because it's a second mechanism for keeping compute per bit of entropy constant
+    2. use the number of loops to make up for the amount of compression in the model
+        - the model will have varying memory and compute requirements depending on how much a sequence is compressed, which is bad
+        - you can simply adjust the amount of latent looping to make up for compute variance, and the number of steps you propagate back with truncated BPTT to make up for memory requirements if they differ
+        - this would additionally allow the model to compress more agressively
+  - Both of these ways of scaling compute through latent looping are compatible
+  - The encoder and decoder act like the Prelude and Coda in Geiping et al. so the techniques from that paper could simply be used on an H-Net
+
+</details>
