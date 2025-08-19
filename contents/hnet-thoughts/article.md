@@ -1,10 +1,10 @@
 # Various thoughts on the H-Net
 
-I have just read the H-Net paper (LINK) and it's amazing. So amazing in fact that inspired a lot of thoughts around it. I'll put some of those in dedicated articles, and the scattered here.
+I have just read the H-Net paper (LINK) and it inspired a lot of thoughts around it. I'll put some of those in dedicated articles, and the rest here.
 
 This article assumes that you've already read the paper, or at least chapters 1 and 2.
 
-I'll split it into two parts: interesting ways to use the H-Net, and scattered thoughts about the architecture.
+I'll split it into two parts: interesting ways to use the H-Net, and scattered thoughts about the architecture, including how to combat the variance in compute- and memory-requirements over different sequences, the biggest challenge of the H-Net.
 
 ## Interesting uses for the H-Net
 
@@ -32,7 +32,7 @@ Of course, the same should be possible with a lot of other domains as well, maki
 
 ## Thoughts on the architecture
 
-In this section, I'll speculate about the architecture of the H-Net. These thoughts are purely theoretical, but they will inform what experiments I'll try out once I get to it. Feel free to try them out yourself though! I'd appreciate a citation, but I certainly won't get around to trying all of these out, so go ahead. All of them are independent from each other, and none of them are guaranteed to work.
+In this section, I'll speculate about the architecture of the H-Net. These thoughts are purely theoretical, but they will inform what experiments I'll try out once I get to it. Feel free to try them out yourself though! I'd appreciate a citation, but I certainly won't get around to trying all of them myself. All of them are independent from each other, and none of them are guaranteed to work.
 
 ### Improving how the model dimension is changed
 
@@ -140,7 +140,46 @@ Therefore, I suggest placing a transformer layer with a sliding window on the re
 
 Of course, we can additionally replace the MLP with a sparse MoE, making the layer even more expressive at the same cost.
 
+### Mixture of Experts
+
+It's an obvious step to make every MLP in every transformer layer in the H-Net an MoE: while the H-Net provides sparsity and hierarchy along the sequence dimension, an MoE provides sparsity along the model dimension.
+
+But there is an additional advantage to using MoEs: they could be used to undo the H-Net's biggest weakness.
+
+What is the H-Net's biggest weakness? Both during training and during inference, different sequences will be compressed to a different degree, and will thus use up different amounts of compute. That's one of the main points of the architecture! However, this causes issues during training and inference: the compute- and memory-requirements aren't predictable, and can vary wildly from batch to batch. This means that we either have to provide enough memory to deal with the worst possible batch, and thus get really low GPU usage for most of the batches, or accept the inevitable OOM error at some point, which is terrible.
+
+However, a Mixture of Experts can come to the rescue: in it, the router provides a relevance score for the given input token to each expert, and we pick the top-*k* experts to actually use (and weight by their relevance score, as far as I know). We could simply vary *k* dynamically depending on the compression ratio of the chunking module, and almost completely make up for the variance that the H-Net brings with it!
+
+However, we need to vary the compute *up* when the average compression in a batch is *high*, and *down* when it is *low*. That's the exact opposite of what we want! So instead, we need to work with fairly large batches, and do the selection per-sample:
+
+- If the mean compression in the batch is high, we *increase* compute significantly in the few samples that are poorly compressible, and keep it constant in the easy-to-compress samples
+- If the mean compression in the batch is low, we keep compute in the many poorly compressible samples constant, and *decrease* compute significantly in the few easy-to-compress samples
+- If the mean compression in the batch is medium, we increase compute a bit for the hard-to-compress samples, and decrease it slightly for the easy-to-compress ones
+
+This allows us to always keep the *total* memory- and compute-requirements constant for each batch. Of course, during training, the compression will rise predictably over the course of many batches, and we can make up for that by simply increasing the batch size or sequence length, but this method can be used to filter out the noise in-between.
+
+If this works (and I have to be upfront about not knowing as much as I'd like to about MoEs, so it could easily just not work), then it would be a very nice improvement to the practical usability of the H-Net!
+
+There are two additional effects of this methods, both of which could be good or bad.
+
+The first is that it might allow the model to compress more agressively. That's because if the model compresses a sequence more strongly, it will simply spend more compute via more experts to make up for that. That's good if you want strong sparsity along the sequence dimension at the cost of less sparsity along the model dimension, or bad if you don't.
+
+The second is that the MoE will have to learn to make use of a varying number of experts. I guess that that's good, because it gives another dimension for dynamically scaling compute at inference time, but I'm not certain if it doesn't muck up gradients, or the specialization of experts, or something else.
+
+As for disadvantages, I can see one: it's way more complex than normal MoE training.
+
 ### Latent Looping
+
+- I initially thought that this could be used to controll the compute and memory requirements, but it only works for varying sequential compute, not parallel (though varying the number of steps in truncated BPTT does at least vary memory requirements)
+- H-Net is still a great fit for latent looping à la Geiping
+- Encoder == Prelude, Decoder == Coda, Main Module == Recurrent Module
+- Like with MoEs, varying the number of latent loops up when compression is low and down when it is high could allow the model to compress more agressively
+- If we do this, I can now think of four ways to vary compute dynamically during inference time:
+  - Vary the compression ratio of the H-Net (not sure how well it works, but the authors mentioned that)
+  - Vary the number of active experts per forward pass
+  - Vary the number of latent loops
+  - Vary the amount of CoT that the model produces in language space
+- This would probably enable a slider that continually increases compute spent (though the exact ratio of the different ways to increase compute would have to be optimized at every point I suspect)
 
 I have several ideas for how to incorporate latent looping into the H-Net, which I think could have multiple advantages. However, I'm hitting the limits of my knowledge very quickly, so the section is somewhat meandering and too speculative even for my taste. I will keep it in, but not as part of the main article.
 
@@ -149,7 +188,7 @@ I have several ideas for how to incorporate latent looping into the H-Net, which
 
 I believe that the main module of the H-Net is an attractive target for latent looping a là [Geiping et al.](...) (LINK) and could provide three potential benefits:
 
-- Reduce the variance of memory and compute requirements during training and inference, which are a huge remaining problem of the method
+- Reduce the variance of memory and compute requirements during training and inference, which are a huge remaining problem of the method (this would be by far the biggest advantage of latent looping, but I'm not certain that the details work out)
 - Handle difficult sections more gracefully
 - Encourage more compression
 
@@ -163,19 +202,30 @@ And it does have one advantage that is very specific to the H-Net: being a count
 
 #### Reducing the variance of compute- and memory-requirements
 
-> I have gone through multiple iterations of the ideas in this section, which I'll keep in the order in which I've had them to show multiple approaches that wouldn't work, and why they wouldn't work.
+> I have gone through multiple iterations of the ideas in this section, which I'll keep in the order in which I've had them to show the approaches that wouldn't work, and why they wouldn't work.
 
 The fact that the H-Net determines token boundaries dynamically means that two sequences of the same length might require very different amounts of memory and compute if one of them is compressed more strongly than the other. The compression ratio of course increases over the course of training, but it will vary almost randomly from batch to batch. If this variance is small, it's not a big issue, but if it's big, then it is. That's because a large variance in compute and memory needs requires you to plan for the least efficient batch possible (or you'll get an Out Of Memory Error, which is very bad). But that means that for most batches, you will have poor GPU usage.
 
-With latent looping, we can make up for that: just loop the main model more often when compression is high, and less often when it is low. If this is done right, it could almost completely make up for compute- and memory-variance by keeping compute per sequence constant.
+With latent looping, we can make up for that. The TLDR is that it's likely possible to vary the Truncated Back Propagation Through Time (TBPTT) steps, but I'll start with a simpler thought and work my way up to that, in order to point out some of the problems one could run into (and I have to stress that I'm still not certain that this trick would work).
+
+My first idea was to just loop the main model more often when compression is high, and less often when it is low. If this is done right, it could almost completely make up for compute- and memory-variance by keeping compute per sequence constant.
 
 The problem with this approach is that keeping compute per sequence constant is contra the entire point of the H-Net (or at least its main selling point): When a sequence is simple and thus highly compressible, we *want to* spend less compute on it than if it's difficult.
 
 So instead, we could use the following approach:
 
 - Decide on a baseline number of loops, for example 5
-- Depending on the average compression in the current batch, we vary this number up or down
-- If it's varied to a non-integer number, we can approximate it
+- Depending on the average compression in the current batch, we vary this number *up* in the *less compressible* sequences, and *down* in the *more compressible* ones
+- By getting this balance right, we can approximate any non-integer change-factor
+
+I thinkk this could work for inference. However, there are still two issues during training:
+
+1. Looping for a varying number of iterations in the same batch is very difficult to implement, and I'm not entirely sure if it's even possible
+2. Varying the number of loops only increases the number of sequential computation steps, not the number of parallel steps; and the latter is the actual issue
+
+So here is one last modification to try to equalize compute and memory requirements over subsequent training steps (over the long run, as compression increases predictably, we can simply increase the batch size, but that doesn't work for immediately neighboring batches):
+
+
 
 Like in [Geiping et al.](...) (LINK), it would make sense to slowly increase the baseline number over the course of training while reducing the batch size, but that's highly controllable and thus not a problem.
 
@@ -210,3 +260,7 @@ Like in [Geiping et al.](...) (LINK), it would make sense to slowly increase the
   - The encoder and decoder act like the Prelude and Coda in Geiping et al. so the techniques from that paper could simply be used on an H-Net
 
 </details>
+
+### Chunking with more comparisons
+
+... They show that predicting boundaries from single bytes is worse than predicting them from the comparison between byte pairs. So why not extend this? ...
