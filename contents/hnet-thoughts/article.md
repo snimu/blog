@@ -1,6 +1,6 @@
 # Various thoughts on the H-Net
 
-I have just read the H-Net paper (LINK) and it inspired a lot of thoughts around it. I'll put some of those in dedicated articles, and the rest here.
+I have just read the [H-Net paper](http://arxiv.org/abs/2507.07955) and it inspired a lot of thoughts around it. I'll put some of those in dedicated articles, and the rest here.
 
 This article assumes that you've already read the paper, or at least chapters 1 and 2.
 
@@ -14,13 +14,27 @@ First, two potential use-cases for the H-Net that I didn't see in the paper (I m
 
 The hierarchical structure of the H-Net means that byte-embeddings get compressed into more compact representations, which are compressed into even more compact ones, and so on. What you get from the cascade of encoders is a set of vectors which are progressively smaller, and encode progressively more abstract information.
 
-That's a perfect setup for late interaction RAG (LINK):
+That's a perfect setup for [late interaction](https://arxiv.org/abs/2004.12832) RAG:
 
 - Doing late interaction search makes full use of the information that is available
 - We can do a sort of hybrid search, where we search for very abstract, semantic similarity with some vectors, and more lexigraphic similarity with others
 - And that might be used to improve efficiency: the abstract vectors are much smaller than the ones closer to the bytes, so doing late interaction with them is much cheaper. This can be taken advantage of by first filtering out all chunks that aren't a semantic fit, and then searching with more granularity among the remainder. And of course, this  can be done in multiple stages if the hierarchy of the H-Net is deep enough
 
-It's effectively a set of Matryoshka embeddings (LINK), but along the sequence dimension instead of the model dimension.
+It's effectively a set of [Matryoshka embeddings](https://arxiv.org/abs/2205.13147), but along the sequence dimension instead of the model dimension.
+
+Of course, you wouldn't do that with a causal model, but I see nothing in the way of making the model bidirectional. You can use bidirectional attention where you use attention, you can run one Mamba layer forward and the next backward, you can take the immediate last and next byte into account when chunking, the smoothing module can be adapted, etc.
+
+The only issue I can see is that the chunker might not work very well with a masked prediction objective, because the masks (which should on average span several bytes) might interfere with it (though they could also be another forcing function teaching the model to guess what's behind the mask better, so that it can draw the boundaries more confidently).
+
+If the chunking is problematic with masked language modelling, I could see another solution: turning the model into an autoencoder by doing bidirectional prediction of the exact input sequence (which is unmasked), while removing the residual connection from the encoder output to the decoder input like so:
+
+![H-Net as Autoencoder](images/hent-equations-autoencoder.png)
+
+If either of these methods work, [Layer by Layer](http://arxiv.org/abs/2502.02013) suggests that the outermost layer activations shouldn't be used for embeddings:
+
+![Layer by Layer: main plot](images/layer-by-layer-main-plot.png)
+
+The H-Net's main module is pretty large, so we can simply pick and choose the best layer index to take our activations from. But the encoders and decoders are small, so the choice is more difficult. Essentially, for all levels of hierarchy but the deepest (which consists of the main module), we need to determine whether we use the encoder or decoder activations. If we use the encoder activations, I suggest using the output of the second-to-last encoder layer, because that's the layer furthest away from the input that isn't yet hyper-specialized for the chunking operation (one would hope). For the decoder, using the output of the first layer seems best, because it mixes the output of the main module and the residual from the encoder, leading to a more fine-grained representation, but is still three layers away from the final output. Ultimately, the best choice of layer is an empirical question though, and there is no guarantee that this is actually as good as I would hope.
 
 ### Dynamic chunking as a tool for science
 
@@ -40,7 +54,7 @@ In this section, I'll speculate about the architecture of the H-Net. These thoug
 
 The encoder and decoder of the H-Net act on much longer sequences than the main module, so to make up for the increased compute requirement, they have a lower model dimension than the main module.
 
-To achieve this, the model dimension of course has to be actively changed. It has to be increased when stepping down into the main module, and decreased again when stepping back up into the decoder. The typical way to do this would be to use linear layers in between, but those interrupt the residual layer and therefore destroy gradient flow (which is especially important in multi-level hierarchies, but already unacceptable for one level of hierarchy). To avoid this problem, the authors borrow a technique from SpaceByte (LINK): to increase dimensionality, we concatenate the small vector with a learned vector of the right dimension. To reduce dimensionality, we simply cut off and discard the excess vector-entries.
+To achieve this, the model dimension of course has to be actively changed. It has to be increased when stepping down into the main module, and decreased again when stepping back up into the decoder. The typical way to do this would be to use linear layers in between, but those interrupt the residual layer and therefore destroy gradient flow (which is especially important in multi-level hierarchies, but already unacceptable for one level of hierarchy). To avoid this problem, the authors borrow a technique from [SpaceByte](https://arxiv.org/abs/2404.14408): to increase dimensionality, we concatenate the small vector with a learned vector of the right dimension. To reduce dimensionality, we simply cut off and discard the excess vector-entries.
 
 This process preserves gradient flow and thus works well, but I see a potential improvement to both parts (the up- and the down-projection).
 
@@ -48,7 +62,7 @@ This process preserves gradient flow and thus works well, but I see a potential 
 
 In the down-projection, I find it inefficient to just throw away a part of the activation vectors. While yes, the model can make use of the full dimensionality in intermediate layers, and concentrate all that information at the part that isn't discarded, it's still lost model capacity (or rather, data-transport capacity, which is also important).
 
-To make up for that, we'll borrow a trick from modded-nanogpt (LINK): adding the input embeddings to the residual at every layer. They perform `x = x_lambda * x + x0_lambda * x0`, where the two lambdas are learned scalars, `x` is the residual at the input to the current layer, and `x0` are the original token embeddings.
+To make up for that, we'll borrow a trick from [modded-nanogpt](https://github.com/KellerJordan/modded-nanogpt): adding the input embeddings to the residual at every layer. They perform `x = x_lambda * x + x0_lambda * x0`, where the two lambdas are learned scalars, `x` is the residual at the input to the current layer, and `x0` are the original token embeddings.
 
 We can do the same with the discarded part of our vector!
 
@@ -132,6 +146,8 @@ Replacing the linear layer on the residual from the encoder to the decoder with 
 
 And that's in addition to the improved gradient flow from having a residual in the residual.
 
+**IMPORTANT:** There is one important detail that we have to take care of for this change to work. When using a linear layer to transform the residual, that linear layer is initialized to zero. This ensures that the main module gets enough gradients in the beginning that the model doesn't learn to simply route around it for more greedy decoding. If we want to achieve the same effect, the sum between the de-chunked output of the main module and the output of the residual must be weighted, those weights must be scalar and learned, and they must be initialized to 1.0 for the main module and 0.0 for the residual. That's trivial to do though, and doesn't interfere with the gradient to any relevant degree. It has the additional advantage that the learned weights are a great interpretability tool.
+
 #### Mamba or transformer?
 
 The H-Net paper spends a lot of time on the question of what type of mixing-layer to use: a Mamba 2 layer, or a transformer layer consisting of an attention layer with a sliding window of size 1024 and an MLP?
@@ -172,7 +188,7 @@ As for disadvantages, I can see one: it's way more complex than normal MoE train
 
 ### Latent Looping
 
-Latent looping à la [Geiping et al.](...) (LINK) is a good fit for the H-Net architecture: The encoder and decoder of the H-Net can act as the Prelude and Coda respectively, and the main module as the recurrent module.
+Latent looping à la [Geiping et al.](http://arxiv.org/abs/2502.05171) is a good fit for the H-Net architecture: The encoder and decoder of the H-Net can act as the Prelude and Coda respectively, and the main module as the recurrent module.
 
 I initially thought that this could be used to controll the compute and memory requirements, but it only works for varying sequential compute, not parallel (though varying the number of steps in truncated BPTT does at least vary memory requirements).
 
