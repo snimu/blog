@@ -14,11 +14,7 @@ First off, bytes of images should have different embeddings than bytes from text
 
 Secondly, we can look at how the dimensionality of the vectors is increased as we step into a higher level of abstraction. The typical thing to do in order to change the dimension of a vector is to use a linear layer, but that interferes with the gradient and that's bad. So instead, the H-Net authors borrow a technique from SpaceByte (LINK): to increase dimensionality, concatenate a learned vector to the input, to decrease it just throw away the excess entries. This allows for a clean gradient. Just like we use different byte embeddings for the text- and image-parts of the VLM, we can use different learned vectors to extend the vector dimension for the text- and image-parts.
 
-## More speculative improvements
-
-Now, I want to discuss more speculative, complex improvements to the pipeline.
-
-### Separating text and images
+## Separating text and images
 
 Text is a far more compressed modality than images, to the point where raw text-bytes express significantly more information than raw image-bytes. Therefore, simply putting both together at the same input can lead to problems. The solution is to first compress the images into tokens of approximately the same information density, or "meaning-compression", as the text-bytes, and only then merge them.
 
@@ -54,41 +50,60 @@ This has multiple advantages:
 - At the same time, the output latents for text and images can be produced from the shared latent from individual weights, allowing a specialization to each modality
 - And yet, both still have the full context in both modality-branches of the decoder
 
+## Ideas I've dismissed
+
+I've dismissed two ideas. I will keep them here in case anybody is interested; you can simply maximize the two points below.
+
+<details>
+<summary>Bidirectional attention for images</summary>
+
 ### Bidirectional attention for images
 
-TODO
+*Note: I'm very skeptical that the ideas in this section will work, and I'll include all the issues, but I wanted to write them down anyway because maybe they'll be useful or can be improved on.*
 
-- flattened image + causal pred = strong bias which is unnatural
-- bidirectional attention per image is better
-- solution:
-  - In the batched encoding and chunking layer, use bidirectional attention instead of Mamba (you can have like two layers of attn then two layers of Mamba for its bias toward compressing representations which is good for chunking, but starting with bidir attn for understanding the imag in a more natural way, which should help the Mamba layers and the chunking and the representation given to the next step)
-    - preserves temporal causality
-    - without treating 2D space the same way as 1D time, which would be dumb
-  - At the output, just do the inverse
-    - for training, this obviously just works
-      - though it makes image prediction trivial
-      - solution: heavy masking at input
-    - for inference, it's completely fine if we simply want to understand an image
-    - but that violates causality if we want to generate one!
-      - solution: add a VAE loss to the image-only parts of the model
-      - this forces it to have the same representation at the output of the image-only-encoder and the input of the image-only-decoder
-      - which would enable us to simply loop the latents in the autoregressive part of the model, then decode all the generated latents in parallel with the bidirectional attention decoder
-      - just run the full model including the encoder once on the generated image after it has been generated to update the align the model's internal representations with what it has actually generated
-      - question: would this also encourage the text part to share a representation? after all, the use the same backend. the splitting of modalities at the output might mean that no, it doesn't, but if it does, it would immediately enable us to do latent looping there as well (need to specifically train it of course)
-- H-Net provides a unique way to add autdio-information to the model:
-  - Deeper stages of the model have a higher model dimension than ones closer to the in- and output
-  - For reducing the dimensionality, this switch is done by just cutting away the excess part of the vector (I have ideas for what to do with those parts, but I'll get to them in another article)
-  - For increasing the dimensionality, the missing part of the vector is added by concatenating a learned vector of the dimensionality that is missing
-  - This vector could encode information about sound in the video!
-  - We can get the vector by running another, smaller H-Net in parallel that just encodes the audio
-    - appending a single vector three times per forward pass requires very little communication, so the second model could be run in parallel very easily
-  - Audio and video are always synched, so adding one audio vector per video frame makes sense
-  - If the reduction / increase in dimensionality is small, the audio model can be much smaller than the video model (it can also be smaller otherwise by just reducing its dimensionality)
-  - The only issue I can see with this is that we'd either have to chunk the audio-model outputs the same way as the video model outputs, or interpolate between the chunks in an appropriate way, which would add a lot of complexity
+Flattening images and running causal mixing layers over them introduces weird biases, and requires multiple layers to propagate information from the right side of an image to the left, or the bottom to the top (assuming left-to-right, top-to-bottom flattening). It would be preferable to use bidirectional attention on the images (at least for the first two layers of the outermost encoder and the last two layers of the outermost decoder, the other layers can still be Mamba for its skill at compression).
+
+However, that would undo the autoregressive nature of the H-Net. We would have to generate all the hidden states from the main module at once, because if we produced them autoregressively, we'd couldn't have a kv-cache and that's very expensive. But we cannot do that, because in order to produce the hidden states at the output, we need to know what the image looks like at the input (that's how the model is trained).
+
+To solve the issue, we could do the following:
+
+- Only have the parts be bidirectional that don't involve text (so the first encoder and last decoder on the images)
+- For these parts, introduce an additional loss that makes sure that the representations at the output of the first encoder and those the the input of the last decoder are the same
+- This way, we can run the following procedure during inference:
+  1. Run the pipeline up to the image that we want to generate, and produce the first hidden state at the input of the last decoder
+  2. Without running that last decoder, and without running the first encoder again, simply loop the latent at the input of the last decoder to the output of the first encoder and produce the next latent
+  3. Repeat until we have the exact sequence length that we need
+  4. Run the final (bidirectional) decoder and the image head over it once to produce the image
+  5. (Optional) run the entire model over the produced image again, so that the model sees what it actually produced instead of what it intended to generate
+- To produce the image, we need the chunking probabilities. How can we get those without access to the ground-truth image?
+  - Simply have *only* the outermost layers be bidirectional
+  - Then, loop at the byte level
+  - The encoder doesn't run, but the chunker still can run, so we get the boundary probabilities without issue
+
+Of course, a bidirectional view on the images will make autoregressive prediction trivial during training; it requires learning only a copy operation. Circumventing this would require heavy masking of the input image, but there we run into another problem: can the chunker handle masked bytes? It would be important that the masks would extend over multiple bytes, so this would be a very difficult task.
+
+And I wonder: would this also encourage the text part to share a representation? After all, the two modalities use the same backend. The splitting of modalities at the output might mean that no, it doesn't, but if it does, it would immediately enable us to do latent looping there as well (need to specifically train it of course). On the other hand, this could severely limit the expressivity of the model (though shared weights for the embedding and language head work well, so I'm hopeful that it wouldn't).
+
+So I'm left with three potential issues with this method:
+
+1. The extra loss might be difficult to get right: if it's not strong enough, the autoregressive generation without translation into image space won't work, but if it's too strong it will interfere with the gradients from the main loss, and thus reduce model performance
+2. The chunker might not be able to handle masking
+3. It's possible that the extra loss will reduce the expressivity of the model
+
+Therefore, I doubt that this will work in a practical setting.
+
+</details>
+
+<details>
+<summary>Use a diffusion model</summary>
 
 ### Use a diffusion model
 
 TODO
+
+Not remotely required, but would be good in that it would make the H-Net just produce guidance vectors, which can be generated autoregressively because they can be much more text-like. Also, the H-Net can be focused on image-understanding, which in my opinion needs a different kind of compression than image generation but is ideal for guiding image generation, and the diffusion model can be focussed on image-generation, to which it is specialized.
+
+</details>
 
 ### Extending to video
 
@@ -108,6 +123,16 @@ TODO
     - Video tends to be much more compressible over time than space
     - Imagine a blue sky background over hundreads of frames; we can compress the hell out of that
     - So if it works it should be worth it (but we might need to dismiss the per-image bidirectional attention, unfortunately)
+- H-Net provides a unique way to add autdio-information to the model:
+  - Deeper stages of the model have a higher model dimension than ones closer to the in- and output
+  - For reducing the dimensionality, this switch is done by just cutting away the excess part of the vector (I have ideas for what to do with those parts, but I'll get to them in another article)
+  - For increasing the dimensionality, the missing part of the vector is added by concatenating a learned vector of the dimensionality that is missing
+  - This vector could encode information about sound in the video!
+  - We can get the vector by running another, smaller H-Net in parallel that just encodes the audio
+    - appending a single vector three times per forward pass requires very little communication, so the second model could be run in parallel very easily
+  - Audio and video are always synched, so adding one audio vector per video frame makes sense
+  - If the reduction / increase in dimensionality is small, the audio model can be much smaller than the video model (it can also be smaller otherwise by just reducing its dimensionality)
+  - The only issue I can see with this is that we'd either have to chunk the audio-model outputs the same way as the video model outputs, or interpolate between the chunks in an appropriate way, which would add a lot of complexity
 - can add audio information by replacing the learned vector used to extend the dimensionality with audio information
   - this can use a much smaller H-Net for audio
   - temporal chunking must be the same, but only use one vector for each video frame, so no spacial chunking needed
