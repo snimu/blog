@@ -10,13 +10,13 @@ Let's add another value embedding, so that now layers 0&12, 1&13, 2&14, and 3&15
 
 Adding another value embedding *obviously* immediately sets a new modded-nanogpt speedrunning record!
 
-So what happens if we add more value embeddings? Let's add some, for a total of three (baseline), four (see above), five, six, seven, and eight value embeddings, each shared like in the baseline (so applying the n value embeddings to the first n layers, and to the last n layers again in the same order):
+So what happens if we add more value embeddings? In the following plot, we see the validation losses over training of runs with a total of three (baseline), four (see above), five, six, seven, and eight value embeddings, each shared like in the baseline (so applying the n value embeddings to the first n layers, and to the last n layers again in the same order). That means that the one with the most value embeddings applies one value embedding to each layer in the model (except layer 7 which is attention-free).
 
 ![13, 15, 16, 17, 18, 19](images/13-15-16-17-18-19-time-1200-1500.png)
 
 So there is a setting that is even better than having one additional value embedding: having two additional ones.
 
-In fact, here is the order in which the runs cross the 2.92 loss-barrier which is the target of modded-nanogpt medium:
+In fact, here is the order in which the runs cross the 2.92 loss-barrier, which is the target of modded-nanogpt medium:
 
 1. 2 additional value embeddings (1410 sec ~= 23.5 min)
 2. 1 additional value embeddings (1422 sec ~= 23.7 min)
@@ -25,7 +25,7 @@ In fact, here is the order in which the runs cross the 2.92 loss-barrier which i
 5. 0 additional value embeddings (1436 sec ~= 23.9 min) (baseline)
 6. 4 additional value embeddings (1444 sec ~= 24.0 min)
 
-However, that happens only in the last ~50s. In the time before that, which tells us more about what setting is consistently the best, this is the order from best to worst:
+However, these times will of course vary over different training runs, and occur only in the last ~50s. In the time before that, which tells us more about what setting is consistently the best, this is the order from best to worst:
 
 1. 2 additional value embeddings
 2. 1 additional value embeddings
@@ -35,6 +35,21 @@ However, that happens only in the last ~50s. In the time before that, which tell
 6. 4 additional value embeddings
 
 There is unfortunately a lot of variation in these runs, but two additional value embeddings almost certainly outperform the baseline. It might not always be 26 seconds as in these runs, but I expect that it's a consistent edge.
+
+Let's see if adding evermore value embeddings at least improves the amount that is learned per batch, by plotting the loss over the training steps:
+
+![13, 15, 16, 17, 18, 19](images/13-15-16-17-18-19-step-5000-6000.png)
+
+Surprisingly (to me at least), this is not monotonous at all! Here is the ranking of the losses over the steps (from lowest to highest, so best to worst):
+
+1. 5 additional value embeddings
+2. 3 additional value embeddings
+3. 2 additional value embeddings
+4. 1 additional value embeddings
+5. 0 additional value embeddings (baseline)
+6. 4 additional value embeddings
+
+On the one hand, that means that the results for the 4 additional value embeddings are likely a negative outlier, and that in general, adding more value embeddings will improve per-step performance. On the other hand, it means that there is quite a lot of variability in results when we change the value embeddings, which makes analysis of the results more difficult.
 
 ## Removing value embeddings
 
@@ -62,11 +77,11 @@ Removing a full value embedding seems to be worse than not sharing its weights, 
 
 ## Shifting the value embeddings
 
-As discussed above, it might be interesting to shift the value embeddings from the early layers to slightly later layers. Let's see this on one example, where we use the value embeddings on layers 1, 2, and 3 instead of 0, 1, and 2. Since I expect any time-differences to be due to random chance, I will just plot them over the steps:
+As discussed above, it might be interesting to shift the value embeddings from the early layers to slightly later layers. Let's see this on two examples, where we use the value embeddings on layers 1, 2, and 3 or 2, 3, and 4 instead of 0, 1, and 2. Since I expect any time-differences to be due to random chance, I will just plot them over the steps:
 
-![13, 20](images/13-20-step-5000-6000.png)
+![13, 20, 21](images/13-20-21-step-5000-6000.png)
 
-The shifted value embeddings seem to lead to worse results than the non-shifted ones.
+The shifted value embeddings seem to lead to worse results than the non-shifted ones, and moreso the more they are shifted.
 
 ## Sharing value embeddings differently
 
