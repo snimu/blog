@@ -9,6 +9,8 @@ In this article, I present these results, and a lot more ablations of experiment
 - [Shifting value embeddings](#shifting-value-embeddings)
 - [Sharing value embeddings differently](#sharing-value-embeddings-differently)
 
+You can find the reproducible code [at this link](https://github.com/snimu/modded-nanogpt-experiments/tree/main/experiments/00003-value-embeddings).
+
 ## Adding value embeddings
 
 Let's add another value embedding, so that now layers 0&12, 1&13, 2&14, and 3&15 each share one value-embedding. Here are the results plotted over time (cut to the later parts of training so that we can differentiate between the baseline and the new setting):
