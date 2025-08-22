@@ -1,4 +1,4 @@
-# modded-nanogpt: Embeddings Extravaganza 1
+# modded-nanogpt: Embeddings Extravaganza 1 (x00-x04)
 
 modded-nanogpt (LINK) adds the token-embedding x0 to the residual stream in a weighted sum before every layer. What happens if we create additional embeddings layers, and add more and more of them to the weighted sum?
 
