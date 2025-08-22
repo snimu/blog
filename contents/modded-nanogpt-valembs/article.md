@@ -1,6 +1,13 @@
-# modded-nanogpt: Embeddings Extravaganza 2 (value embeddings)
+# modded-nanogpt: Embeddings Extravaganza 1 (value embeddings)
 
-TODO
+Adding more value-embeddings to [modded-nanogpt](https://github.com/KellerJordan/modded-nanogpt) led me to an (as of yet unofficial) modded-nanogpt medium record.
+
+In this article, I present these results, and a lot more ablations of experiments that didn't work out. Here's a table of contents:
+
+- [Adding value embeddings](#adding-value-embeddings)
+- [Removing value embeddings](#removing-value-embeddings)
+- [Shifting value embeddings](#shifting-value-embeddings)
+- [Sharing value embeddings differently](#sharing-value-embeddings-differently)
 
 ## Adding value embeddings
 
@@ -53,7 +60,7 @@ On the one hand, that means that the results for the 4 additional value embeddin
 
 ## Removing value embeddings
 
-If adding value embeddings helps performance per time-step, then removing them should hurt them. Nevertheless, my investigations on different learned scalars in modded-nanogpt (LINK) led me to suspect that it should be possible to remove value-embeddings, especially in the early layers where their effects are strongly suppressed, which would of course speed up the runtime because it would avoid some computation (though only a small amount).
+If adding value embeddings helps performance per time-step, then removing them should hurt them. Nevertheless, my [investigations on different learned scalars in modded-nanogpt](https://snimu.github.io/2025/08/11/modded-nanogpt-lambdas.html) led me to suspect that it should be possible to remove value-embeddings, especially in the early layers where their effects are strongly suppressed, which would of course speed up the runtime because it would avoid some computation (though only a small amount).
 
 So, for the sake of completeness, here are the results of those experiments as well, starting with the removal of single value embeddings:
 
@@ -75,7 +82,7 @@ How about removing full value embeddings? So removing the shared value embedding
 
 Removing a full value embedding seems to be worse than not sharing its weights, though it's difficult to properly compare because it's applied to different layers which, as we have seen, has a big effect. I haven't run any experiments looking at, for example, removing the value embeddings from layers 0 and 14, or 1 and 13, etc., but those would be better comparisons. There is no real trend here where we could say "removing later layers is consistently worse" or something similar.
 
-## Shifting the value embeddings
+## Shifting value embeddings
 
 As discussed above, it might be interesting to shift the value embeddings from the early layers to slightly later layers. Let's see this on two examples, where we use the value embeddings on layers 1, 2, and 3 or 2, 3, and 4 instead of 0, 1, and 2. Since I expect any time-differences to be due to random chance, I will just plot them over the steps:
 
