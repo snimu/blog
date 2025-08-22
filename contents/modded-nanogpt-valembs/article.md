@@ -12,9 +12,29 @@ Adding another value embedding *obviously* immediately sets a new modded-nanogpt
 
 So what happens if we add more value embeddings? Let's add some, for a total of three (baseline), four (see above), five, six, seven, and eight value embeddings, each shared like in the baseline (so applying the n value embeddings to the first n layers, and to the last n layers again in the same order):
 
-TODO
+![13, 15, 16, 17, 18, 19](images/13-15-16-17-18-19-time-1200-1500.png)
 
-...
+So there is a setting that is even better than having one additional value embedding: having two additional ones.
+
+In fact, here is the order in which the runs cross the 2.92 loss-barrier which is the target of modded-nanogpt medium:
+
+1. 2 additional value embeddings (1410 sec ~= 23.5 min)
+2. 1 additional value embeddings (1422 sec ~= 23.7 min)
+3. 5 additional value embeddings (1425 sec ~= 23.75 min)
+4. 3 additional value embeddings (1428 sec ~= 23.8 min)
+5. 0 additional value embeddings (1436 sec ~= 23.9 min) (baseline)
+6. 4 additional value embeddings (1444 sec ~= 24.0 min)
+
+However, that happens only in the last ~50s. In the time before that, which tells us more about what setting is consistently the best, this is the order from best to worst:
+
+1. 2 additional value embeddings
+2. 1 additional value embeddings
+3. 0 additional value embeddings (baseline)
+4. 3 additional value embeddings
+5. 5 additional value embeddings
+6. 4 additional value embeddings
+
+There is unfortunately a lot of variation in these runs, but two additional value embeddings almost certainly outperform the baseline. It might not always be 26 seconds as in these runs, but I expect that it's a consistent edge.
 
 ## Removing value embeddings
 
@@ -39,6 +59,14 @@ How about removing full value embeddings? So removing the shared value embedding
 ![6, 8, 9, 10, 13](images/6-8-9-10-13-time-1200-1500.png)
 
 Removing a full value embedding seems to be worse than not sharing its weights, though it's difficult to properly compare because it's applied to different layers which, as we have seen, has a big effect. I haven't run any experiments looking at, for example, removing the value embeddings from layers 0 and 14, or 1 and 13, etc., but those would be better comparisons. There is no real trend here where we could say "removing later layers is consistently worse" or something similar.
+
+## Shifting the value embeddings
+
+As discussed above, it might be interesting to shift the value embeddings from the early layers to slightly later layers. Let's see this on one example, where we use the value embeddings on layers 1, 2, and 3 instead of 0, 1, and 2. Since I expect any time-differences to be due to random chance, I will just plot them over the steps:
+
+![13, 20](images/13-20-step-5000-6000.png)
+
+The shifted value embeddings seem to lead to worse results than the non-shifted ones.
 
 ## Sharing value embeddings differently
 
