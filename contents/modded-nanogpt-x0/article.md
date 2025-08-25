@@ -22,6 +22,14 @@ The obvious pattern that emerges is that with each additional embedding layer, t
 
 What immediately jumps out is that beyond two additional embeddings, the performance per time-step degrades quickly. And even before that, the baseline is clearly the best throughout the majority of training. However, toward the very end, two runs with added embeddings seem to actually be better: x01 and x02. The differences are tiny though, and I chalk them up to random chance.
 
+There is a complication to this, though: torch compile flags. In all of the above runs (including the baseline), I removed the `torch._dynamo.config.compiled_autograd = True` flag, because it cause an error in flexattention that I didn't want to deal with; and I removed the `_patched_trace_structured` function because it cause some other error that I didn't want to deal with. I have, however, kept the `torch._inductor.config.coordinate_descent_tuning = True` flag. In [the latest record log](https://github.com/KellerJordan/modded-nanogpt/blob/master/records/042225_GPT2Medium_Record8/075_640429f2-e726-4e83-aa27-684626239ffc.txt), there is a comment behind it that says `# we have banned this flag for new records because it causes compilation to take 30min` (though this comment isn't present in `train_gpt_medium.py`, and I measure around 4 minutes of compile and warmup time). So I ran the baseline and the first two experiments again without the flag, 5 times each. For each step, I averaged the time over the 5 runs, and the loss; both independently. That's not quite correct, but it gives a pretty good feel for what's going on. Here are the resulting loss curves:
+
+![Val Losses without coordinate_descent_tuning](images/val_loss_time_record.png)
+
+In this case, adding a single additional embedding causes a very clear record.
+
+Below, I will try to determine how the model uses the additional embedding to improve its per-step (and, depending on the flag, per-time-step) performance.
+
 ## Lambdas
 
 To me, the most interesting part about these results is that adding more embedding layers just keep improving model performance per step. In some sense, that's expected, because embedding layers are just cheap additional parameters. On the other hand, I do find it somewhat surprising: these embeddings look at each token individually, so on their own they can at best achieve 1-gram accuracy, which is bad. They must help the model learn to make better use of the main layers somehow; let's look at the lambdas in order to find out how.
@@ -61,3 +69,7 @@ Assume that x00 is a pure representation of the input tokens; and that x01 is a 
 One potential upset to this theory is that x00 and x01 are RMS-normed, but x isn't (except before layer 0 and after layer 15). Of course, x is always normed at the input to the Attention and MLP layers, but not at their outputs, and thus never at the residual, where the weighted sum between x, x00, and x01 always occurs. This means that it's possible that the norm of x could be rising monotonically, or vary wildly.
 
 I don't believe that that's the case though; if it were, SGD would likely vary both the norm of x *and* the x-lambda in the same direction, at least somewhat. I would therefore assume that the norm of x is fairly stable throughout. In fact, I can *imagine* that x00 (and x01) stabilize the norm of x. The hypothesis is: x00 and x01 are normed, while x floats freely, so it's easier to control the relative weights of all three by varying the lambdas of x00 and x01, while keeping the both the lambda and the norm of x fairly constant, than to control both the lambda and norm of x. I'm very unsure about this though.
+
+---
+
+So I measured some outputs to test the above predictions!
