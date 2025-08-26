@@ -45,11 +45,11 @@ However, these times will of course vary over different training runs, and occur
 
 There is unfortunately a lot of variation in these runs, but two additional value embeddings almost certainly outperform the baseline. It might not always be 26 seconds as in these runs, but I expect that it's a consistent edge.
 
-Let's see if adding evermore value embeddings at least improves the amount that is learned per batch, by plotting the loss over the training steps:
+Let's see if adding more and more value embeddings at least improves the amount that is learned per batch, by plotting the loss over the training steps:
 
 ![13, 15, 16, 17, 18, 19](images/13-15-16-17-18-19-step-5000-6000.png)
 
-Surprisingly (to me at least), this is not monotonous at all! Here is the ranking of the losses over the steps (from lowest to highest, so best to worst):
+This seems almost monotonous, except for adding four additional value embeddings, which is the worst. Here is the order in which they cross the threshold:
 
 1. 5 additional value embeddings
 2. 3 additional value embeddings
@@ -58,7 +58,7 @@ Surprisingly (to me at least), this is not monotonous at all! Here is the rankin
 5. 0 additional value embeddings (baseline)
 6. 4 additional value embeddings
 
-On the one hand, that means that the results for the 4 additional value embeddings are likely a negative outlier, and that in general, adding more value embeddings will improve per-step performance. On the other hand, it means that there is quite a lot of variability in results when we change the value embeddings, which makes analysis of the results more difficult.
+I would interpret this as "more value embeddings lead to more learning per step", but the training run when I added 4 additional value embeddings was an outlier. I assume it would fit in nicely with the others in the trend if run multiple times.
 
 ### Compile flags and rules
 
@@ -67,11 +67,16 @@ The runs above were performed with some changes to code even for the baseline:
 - I removed the `torch._dynamo.config.compiled_autograd = True` flag because it caused some flexattention error that I didn't want to deal with
 - I also removed the `_patched_trace_structured` function and the corresponding imports etc., because it caused another error that I didn't want to deal with
 
-At this point, the baseline performs in 23.7min, instead of the official 24.5min. That might be due to the newer PyTorch version, `torch==2.9.0.dev20250824+cu126` (I ran the `pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu126 --upgrade` as in the instructions).
+At this point, the baseline performs in 23.7min, instead of the official 24.5min. That might be due to the newer PyTorch version, `torch==2.9.0.dev20250824+cu126` (I ran the `pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu126 --upgrade` as in the instructions), or some other reason. It is consistent across runs on both 8xH100 by Prime Compute and by Hyperstack, so I don't believe that it's a hardware difference.
 
 However, the log of the most recent record includes a comment next to the `torch._inductor.config.coordinate_descent_tuning = True` flag: `# we have banned this flag for new records because it causes compilation to take 30min` which I only saw very late.
 
-Compilation didn't take 30 minutes for me even with the flag on (I measured it once, and compilation + warmup steps together took 04m05s with the flag on, and 00m54s with the flag off), so I don't really get the comment (maybe it takes that long with the `compiled_autograd` flag on, but the baseline is still faster than the official record even without that). However, I still tested out the baseline and the two best settings (one and two additional value embeddings). Here are the losses averaged over 5 runs each:
+Compilation didn't take 30 minutes for me even with the flag on:
+
+- I measured it once, and compilation + warmup steps together took 04m05s with the flag on, and 00m54s with the flag off
+- In my dozens of runs I never noticed it taking even close to half an hour
+
+So I don't really get the comment. Maybe it takes that long with the `compiled_autograd` flag on, but the baseline is still faster than the official record even without that. However, I still tested out the baseline and the two best settings (one and two additional value embeddings) without `coordinate_descent_tuning`. Here are the losses averaged over 5 runs each:
 
 ![val loss with changed compile flags](images/val_loss_time_record.png)
 
@@ -81,7 +86,9 @@ And clearly, adding one or two more value embeddings leads to a strong record, c
 - One additional value embedding: 1463s &rarr; 24.38m
 - Two additional value embeddings: 1439s &rarr; 23.98m
 
-A note on the averaging: I very simply averaged the loss for each training step, and independently averaged the time taken at each training step, and then plotted the loss over the training time. That's not 100% mathematically correct because I'm averaging losses that happended after different amounts of time, but the averaging of the times should mostly make up for that, so the results are still valid (especially considering the large margin with which the record is set).
+In fact, the speed difference is higher than with the flag on! All experiments below were run with `coordinate_descent_tuning = True` though, because I performed them before reading that comment.
+
+> A note on the averaging: I very simply averaged the loss for each training step, and independently averaged the time taken at each training step, and then plotted the loss over the training time. That's not 100% mathematically correct because I'm averaging losses that happended after different amounts of time, but the averaging of the times should mostly make up for that, so the results are still valid (especially considering the large margin with which the record is set).
 
 ## Removing value embeddings
 
