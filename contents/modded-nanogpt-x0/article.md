@@ -74,6 +74,8 @@ I don't believe that that's the case though; if it were, SGD would likely vary b
 
 So I measured some outputs to test the above predictions!
 
+#### Predictions
+
 Firstly, and most importantly, I took 32 input tokens, ran a forward pass over them, and saved the top-10 predictions for x (at the input of the last layer, before it'a mixed with x00, x01, or the value embeddings), x00, x01, and the value-embeddings ve0, ve1, and ve2. You can find the full ten predictions under [predictions.md](https://github.com/snimu/modded-nanogpt-experiments/blob/main/experiments/00004-x0/predictions.md), together with the predicted probability for each token, and the code that produced the results [at this file](https://github.com/snimu/modded-nanogpt-experiments/blob/main/experiments/00004-x0/runs/4-2025-08-22-x00-x01-with-word-logging.py). Below, I simply show the most likely next token at each position, for each of the different components.
 
 The dictionary shows one sub-dictionary for each component (x, x00, etc.). Each of these subdictionaries maps from the token position to another sub-sub-dictionary, which in turn maps from the true input tokens at each position to the most likely next token as decoded from each component by the language head.
@@ -291,6 +293,35 @@ Here are the results:
 }
 ```
 
-The first interesting result I'm seeing is for x00: while it's just the input embeddings, the language head interprets them as next-token predictions! "mail" -> "address", "account" -> "ancy", etc. are all clear 1-gram next-token predictions. I was right in my assumption that that's included, but wrong about which component represents it.
+The first interesting result I'm seeing is for x00: while it's just the input embeddings, the language head interprets them as next-token predictions! "mail" &rarr; "address", "account" &rarr; "ancy", etc. are all clear 1-gram next-token predictions. I was right in my assumption that that's included, but wrong about which component represents it.
 
 x01 sometimes contains a copy of the input, sometimes a seemingly random token. However, the top-10 predictions who that they often include similarly-sounding or -written words, or variants. For example, the next prediction for " account" is `[' account', 'agons', 'berry', ' Account', 'teenth', 'account', ' accounts', 'oku', 'colored']`. That's somewhat random, but some variant of "account" appears very often.
+
+So my first intermediate conclusion is that the language head treats the input embeddings of current tokens as embeddings of the next token for each, and x01 makes up for that by providing (very approximate) information about the input embeddings. I believe that this switch is caused by the value embeddings: the same value embeddings are applied to layers 0 and 13, and 1 and 14, and 2 and 15. So the same embeddings must perform some task early and late in the model, which means that it's likely valuable for the model to interpret them differently at different points of the model. This has the nice side-effect that it minimizes the amount of change to x required over the length of the model, because leaving it un-changed makes it simply the 1-gram next-token predictions.
+
+The next observation is that x also makes next-token predictions. So if both x and x00 are next-token predictions, why is x00 removed from the residual at the last few layers? One possible adaptation to my hypothesis is this (guaranteed to be overly simplified again, and pretty likely to still be wrong):
+
+- x00 provides a 1-gram next-token prediction distribution at every layer of the model
+- In early layers, this helps the model pick a direction for x, by biasing it
+- In the last few layers, this prediction is substracted from x, to reduce the 1-gram bias which is of course sub-optimal, leaving only the refined x
+- x01 gives an approximate view of the input, and the contrast between it and the next-token predictions by x00 gives the model additional information about how exactly it needs to refine the vector to make the best possible predictions
+
+As for the value embeddings, they are (1) very different, and (2) make no sense. The latter isn't surprising; after all, they are applied inside the attention mechanism, not to the residual directly, so they are two transformations away from where the language head is usually applied. I just thought it would have been really interesting if they did make sense.
+
+#### Norms
+
+Typically, the norm of the activations rises from layer to layer if we don't use post-norm, which we don't. Since the embeddings x00 and x01 *don't* change in norm, this changes the total weight of each component significantly.
+
+So I measured the norms of x over the different layers to make up for this phenomenon.
+
+Unfortunately, I used `torch.linalg.norm` to measure the norm, while I used RMS-norm on to normalize the embeddings during the forward pass; so this doesn't fit perfectly. As I didn't think of this, I didn't measure the norms of x00 and x01; but x00 is x at the first layer, so the first norm of x is also the norm of x00, and I simply assumed the same for x01. So I divided all norms of x over the layers by the norm at the input of the first layer. Then, I multiplied the x lambda with the activation's norm at every layer. Finally, I normalized again by dividing each lambda at each layer by the sum over the absolute values of all lambdas at that layer. This way, we see a percentage weight of each component over the layers, taking the norm of the values into account (in an imperfect manner, unfortunately).
+
+Here is that plot:
+
+![Norm-corrected lambdas](images/0-layer-mean5-normalized-and-xnorm.png)
+
+I can see two noteworthy phenomena.
+
+The first is that the effects discussed above are very strongly visible even in the normalized plot, which is good to know.
+
+The second is that in layer 8, the weight of x rises sharply, and that of x00 drops off a cliff. I assume that that's due to layer 7 not having an attention block, only an MLP, and since an MLP just approximates a dynamic embeddings layer for mixed tokens, it will be able to replace x00 at this point, but with more contextualized and thus more valuable information (because there were attention layers before it). I would guess that this makes x00 a distraction compared to what the MLP already adds to the residual stream, necessitating it to be set to approximately zero.
