@@ -91,7 +91,9 @@ And clearly, adding one or two more value embeddings leads to a strong record, c
 - One additional value embedding: 1463s &rarr; 24.38m
 - Two additional value embeddings: 1439s &rarr; 23.98m
 
-In fact, the speed difference is higher than with the flag on! All experiments below were run with `coordinate_descent_tuning = True` though, because I performed them before reading that comment.
+This is the exact same speed difference (26s) between the baseline and two additional value embeddings.
+
+All experiments below were run with `coordinate_descent_tuning = True` though, because I performed them before reading that comment.
 
 > A note on the averaging: I very simply averaged the loss for each training step, and independently averaged the time taken at each training step, and then plotted the loss over the training time. That's not 100% mathematically correct because I'm averaging losses that happended after different amounts of time, but the averaging of the times should mostly make up for that, so the results are still valid (especially considering the large margin with which the record is set).
 
