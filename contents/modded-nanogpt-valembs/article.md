@@ -60,6 +60,29 @@ Surprisingly (to me at least), this is not monotonous at all! Here is the rankin
 
 On the one hand, that means that the results for the 4 additional value embeddings are likely a negative outlier, and that in general, adding more value embeddings will improve per-step performance. On the other hand, it means that there is quite a lot of variability in results when we change the value embeddings, which makes analysis of the results more difficult.
 
+### Compile flags and rules
+
+The runs above were performed with some changes to code even for the baseline:
+
+- I removed the `torch._dynamo.config.compiled_autograd = True` flag because it caused some flexattention error that I didn't want to deal with
+- I also removed the `_patched_trace_structured` function and the corresponding imports etc., because it caused another error that I didn't want to deal with
+
+At this point, the baseline performs in 23.7min, instead of the official 24.5min. That might be due to the newer PyTorch version, `torch==2.9.0.dev20250824+cu126` (I ran the `pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu126 --upgrade` as in the instructions).
+
+However, the log of the most recent record includes a comment next to the `torch._inductor.config.coordinate_descent_tuning = True` flag: `# we have banned this flag for new records because it causes compilation to take 30min` which I only saw very late.
+
+Compilation didn't take 30 minutes for me even with the flag on (I measured it once, and compilation + warmup steps together took 04m05s with the flag on, and 00m54s with the flag off), so I don't really get the comment (maybe it takes that long with the `compiled_autograd` flag on, but the baseline is still faster than the official record even without that). However, I still tested out the baseline and the two best settings (one and two additional value embeddings). Here are the losses averaged over 5 runs each:
+
+![val loss with changed compile flags](images/val_loss_time_record.png)
+
+And clearly, adding one or two more value embeddings leads to a strong record, crossing the 2.92 validation loss threshold much earlier:
+
+- Baseline:1465s &rarr; 24.42m
+- One additional value embedding: 1463s &rarr; 24.38m
+- Two additional value embeddings: 1439s &rarr; 23.98m
+
+A note on the averaging: I very simply averaged the loss for each training step, and independently averaged the time taken at each training step, and then plotted the loss over the training time. That's not 100% mathematically correct because I'm averaging losses that happended after different amounts of time, but the averaging of the times should mostly make up for that, so the results are still valid (especially considering the large margin with which the record is set).
+
 ## Removing value embeddings
 
 If adding value embeddings helps performance per time-step, then removing them should hurt them. Nevertheless, my [investigations on different learned scalars in modded-nanogpt](https://snimu.github.io/2025/08/11/modded-nanogpt-lambdas.html) led me to suspect that it should be possible to remove value-embeddings, especially in the early layers where their effects are strongly suppressed, which would of course speed up the runtime because it would avoid some computation (though only a small amount).
