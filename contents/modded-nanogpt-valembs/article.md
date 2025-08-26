@@ -5,6 +5,7 @@ Adding more value-embeddings to [modded-nanogpt](https://github.com/KellerJordan
 In this article, I present these results, and a lot more ablations of experiments that didn't work out. Here's a table of contents:
 
 - [Adding value embeddings](#adding-value-embeddings)
+  - [Compile flags and rules](#compile-flags-and-rules)
 - [Removing value embeddings](#removing-value-embeddings)
 - [Shifting value embeddings](#shifting-value-embeddings)
 - [Sharing value embeddings differently](#sharing-value-embeddings-differently)
