@@ -74,6 +74,14 @@ I don't believe that that's the case though; if it were, SGD would likely vary b
 
 So I measured some outputs to test the above predictions!
 
+Firstly, and most importantly, I took 32 input tokens, ran a forward pass over them, and saved the top-10 predictions for x (at the input of the last layer, before it'a mixed with x00, x01, or the value embeddings), x00, x01, and the value-embeddings ve0, ve1, and ve2. You can find the full ten predictions under [predictions.md](https://github.com/snimu/modded-nanogpt-experiments/blob/main/experiments/00004-x0/predictions.md), together with the predicted probability for each token, and the code that produced the results [at this file](https://github.com/snimu/modded-nanogpt-experiments/blob/main/experiments/00004-x0/runs/4-2025-08-22-x00-x01-with-word-logging.py). Below, I simply show the most likely next token at each position, for each of the different components.
+
+The dictionary shows one sub-dictionary for each component (x, x00, etc.). Each of these subdictionaries maps from the token position to another sub-sub-dictionary, which in turn maps from the true input tokens at each position to the most likely next token as decoded from each component by the language head.
+
+The full input sentence is `mail account: email@example.com\n- Emails will include links. Nothing fancy. We??re keeping it simple.\n- We?`. The questionmarks are where my terminal didn't properly render the output bytes which I noticed too late. I belive it's just the "'" sign.
+
+Here are the results:
+
 ```python
 {
     'x': {
@@ -283,3 +291,6 @@ So I measured some outputs to test the above predictions!
 }
 ```
 
+The first interesting result I'm seeing is for x00: while it's just the input embeddings, the language head interprets them as next-token predictions! "mail" -> "address", "account" -> "ancy", etc. are all clear 1-gram next-token predictions. I was right in my assumption that that's included, but wrong about which component represents it.
+
+x01 sometimes contains a copy of the input, sometimes a seemingly random token. However, the top-10 predictions who that they often include similarly-sounding or -written words, or variants. For example, the next prediction for " account" is `[' account', 'agons', 'berry', ' Account', 'teenth', 'account', ' accounts', 'oku', 'colored']`. That's somewhat random, but some variant of "account" appears very often.
