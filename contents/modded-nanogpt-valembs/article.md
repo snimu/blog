@@ -61,6 +61,10 @@ This seems almost monotonous, except for adding four additional value embeddings
 
 I would interpret this as "more value embeddings lead to more learning per step", but the training run when I added 4 additional value embeddings was an outlier. I assume it would fit in nicely with the others in the trend if run multiple times.
 
+This outlier also makes me re-interpret the timed differences: I now assume that the 4 additional value embeddings slot in nicely in this timed order (from best to worst): 2-1-0-3-4-5. So for one and two additional value embeddings, the additional loss reduction per step dominates over the additional per-step time, while above two additional value embeddings, the effect reverses.
+
+I'm also curious if this order is determined by the limitations of 8xH100, and if 8xB200 would mean that the record would be broken again and again as we add more value embeddings (though of course, we could probably also add more non-embedding parameters in that case, which could be a better tradeoff).
+
 ### Compile flags and rules
 
 The runs above were performed with some changes to code even for the baseline:
