@@ -210,3 +210,23 @@ The way the boundaries between bytes (or higher level tokens in multi-stage H-Ne
 As a baseline comparison, the authors try to predict the boundary probability from a single byte each. They don't specify how exactly they do this, but I suspect that they simply produce a score directly from the byte embeddings with a linear layer. This works worse than predicting the boundary probability via a comparison between the current and the previous byte. So naturally, I wonder if taking even more bytes into account would make this even better.
 
 I suspect not, or at least not by much; but it should be worth a try.
+
+### Scheduling compression targets
+
+Very deep hierarchies have the huge advantage that they might be able to act efficiently over extremely long sequences, while keeping all the required abstract information in mind (because it's so strongly compressed deep inside the hierarchy).
+
+However, there will come problems with training dynamics if we go too deep: very deep nets imply very large compression, so the main module will step very, very rarely, and thus receive little gradients. To avoid this, the residuals around the main module are already initialized to zero, but at some point, we need more.
+
+The obvious approach is to schedule the compression ratios over training. For example, assuming 5 layers of hierarchy:
+
+- Initialize all compression targets at 1.5 for a total compression of 1.5^5 = 7.6
+- When the model has learned to compress approximately that much, increase the compression ratio of the one level of hierarchy to 2.0
+- When the model's compression is again almost in equilibrium, increase the target for the some other one to 2.0
+- Repeat until all levels are at a compression ratio of 2.0
+- Then, repeat the same process again until you've reached your target compression ratio (e.g. 4 at every level, for a total compression ratio of 1024)
+
+The exact numbers are of course up to the user.
+
+An open question is what order we should increase the compression ratios in. Outermost to innermost? The other way around?
+
+I don't know the answer, but one aspect to keep in mind is that if we change the compression ratio of the innermost level of hierarchy, the ones further out only have to adapt their decoders (a.k.a. how they interpret the main module's outputs). If we change the innermost level of hierarchy, it will require every subsequent chunker to re-learn its chunking function, which affects every single encoder and decoder, because the input to the deeper hierarchies is changed. I expect that it makes sense to increase the compression target more slowly for layers that are closer to the raw data than for ones that are abstracted further away.
