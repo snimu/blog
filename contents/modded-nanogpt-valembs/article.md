@@ -4,29 +4,67 @@ Adding more value-embeddings to [modded-nanogpt](https://github.com/KellerJordan
 
 In this article, I present these results, and a lot more ablations of experiments that didn't work out. Here's a table of contents:
 
+- [The record](#the-record)
 - [Adding value embeddings](#adding-value-embeddings)
-  - [Compile flags and rules](#compile-flags-and-rules)
 - [Removing value embeddings](#removing-value-embeddings)
 - [Shifting value embeddings](#shifting-value-embeddings)
 - [Sharing value embeddings differently](#sharing-value-embeddings-differently)
 
 You can find the reproducible code [at this link](https://github.com/snimu/modded-nanogpt-experiments/tree/main/experiments/00003-value-embeddings).
 
+## The record
+
+The best setting I've found is adding two more value embeddings, in the same tied manner as before. The baseline has the following value embeddings:
+
+- One applied to layers 0 and 13
+- One applied to layers 1 and 14
+- One applied to layers 2 and 15
+
+I have added two more value embeddings in the following way:
+
+- One applied to layers 0 and 11
+- One applied to layers 1 and 12
+- One applied to layers 2 and 13
+- One applied to layers 3 and 14
+- One applied to layers 4 and 15
+
+I re-ran the baseline, because I slightly changed the compile flags and used a newer version of PyTorch. Here is a plot of the value losses over time, averaged over 28 runs for the baseline and 37 runs for the record:
+
+![New record: validation loss over time](images/25-26-record-time.png)
+
+With the two additional value embeddings, the model reaches the target loss in ~35 fewer seconds.
+
+> A note on the averaging: I very simply averaged the loss for each training step, and independently averaged the time taken at each training step, and then plotted the loss over the training time. That's not 100% mathematically correct because I'm averaging losses that happended after different amounts of time, but the averaging of the times should mostly make up for that, so the results are still valid (especially considering the large margin with which the record is set).
+
+The record plot ends earlier because I ran it for fewer steps, 5820 instead of 5890, so all the benefit comes from improved per-step learnability. The per-step time is slightly increased by the new embeddings, as expected. Here is a plot of the validation losses over the steps:
+
+![New record: validation loss over steps](images/25-26-record-step.png)
+
+I clearly could have stopped earlier, but I wanted the record to be rock-solid, because it is a requirement for an official record to show that the final validation loss of the runs is below 2.92 with a very high probability.
+
+Here are the final validation losses over all 37 runs that I've performed:
+
+```python
+[2.919612, 2.919458, 2.918941, 2.917664, 2.91856, 2.919706, 2.919218, 2.918082, 2.919345, 2.920486, 2.919293, 2.917286, 2.921162, 2.919861, 2.917587, 2.919488, 2.919955, 2.919172, 2.919245, 2.918839, 
+2.918381, 2.919301, 2.917944, 2.919178, 2.918395, 2.920141, 2.918754, 2.918432, 2.919958, 2.91978, 2.919916, 2.919711, 2.918025, 2.919342, 2.920571, 2.917387, 2.919093]
+```
+
+And here are some simple statistics about those losses:
+
+- Mean:   2.919 ± 0.001
+- Median: 2.919
+- Min:    2.917
+- Max:    2.921
+
+The probability of the average final loss being below 2.92 is ~99.99995%.
+
 ## Adding value embeddings
 
-Let's add another value embedding, so that now layers 0&12, 1&13, 2&14, and 3&15 each share one value-embedding. Here are the results plotted over time (cut to the later parts of training so that we can differentiate between the baseline and the new setting):
-
-![13-15](images/13-15-time-1100-1500.png)
-
-Adding another value embedding *obviously* immediately sets a new modded-nanogpt speedrunning record!
-
-So what happens if we add more value embeddings? In the following plot, we see the validation losses over training of runs with a total of three (baseline), four (see above), five, six, seven, and eight value embeddings, each shared like in the baseline (so applying the n value embeddings to the first n layers, and to the last n layers again in the same order). That means that the one with the most value embeddings applies one value embedding to each layer in the model (except layer 7 which is attention-free).
+What happens if we add more value embeddings? In the following plot, we see the validation losses over training of runs with a total of three (baseline), four (see above), five, six, seven, and eight value embeddings, each shared like in the baseline (so applying the n value embeddings to the first n layers, and to the last n layers again in the same order). That means that the one with the most value embeddings applies one value embedding to each layer in the model (except layer 7 which is attention-free). These plots are for only a single run each.
 
 ![13, 15, 16, 17, 18, 19](images/13-15-16-17-18-19-time-1200-1500.png)
 
-So there is a setting that is even better than having one additional value embedding: having two additional ones.
-
-In fact, here is the order in which the runs cross the 2.92 loss-barrier, which is the target of modded-nanogpt medium:
+Here is the order in which the runs cross the 2.92 loss-barrier, which is the target of modded-nanogpt medium:
 
 1. 2 additional value embeddings (1410 sec ~= 23.5 min)
 2. 1 additional value embeddings (1422 sec ~= 23.7 min)
@@ -44,9 +82,7 @@ However, these times will of course vary over different training runs, and occur
 5. 5 additional value embeddings
 6. 4 additional value embeddings
 
-There is unfortunately a lot of variation in these runs, but two additional value embeddings almost certainly outperform the baseline. It might not always be 26 seconds as in these runs, but I expect that it's a consistent edge.
-
-Let's see if adding more and more value embeddings at least improves the amount that is learned per batch, by plotting the loss over the training steps:
+Let's see if adding more and more value embeddings consistently improves the amount that is learned per batch, by plotting the loss over the training steps:
 
 ![13, 15, 16, 17, 18, 19](images/13-15-16-17-18-19-step-5000-6000.png)
 
@@ -61,41 +97,7 @@ This seems almost monotonous, except for adding four additional value embeddings
 
 I would interpret this as "more value embeddings lead to more learning per step", but the training run when I added 4 additional value embeddings was an outlier. I assume it would fit in nicely with the others in the trend if run multiple times.
 
-This outlier also makes me re-interpret the timed differences: I now assume that the 4 additional value embeddings slot in nicely in this timed order (from best to worst): 2-1-0-3-4-5. So for one and two additional value embeddings, the additional loss reduction per step dominates over the additional per-step time, while above two additional value embeddings, the effect reverses.
-
-I'm also curious if this order is determined by the limitations of 8xH100, and if 8xB200 would mean that the record would be broken again and again as we add more value embeddings (though of course, we could probably also add more non-embedding parameters in that case, which could be a better tradeoff).
-
-### Compile flags and rules
-
-The runs above were performed with some changes to code even for the baseline:
-
-- I removed the `torch._dynamo.config.compiled_autograd = True` flag because it caused some flexattention error that I didn't want to deal with
-- I also removed the `_patched_trace_structured` function and the corresponding imports etc., because it caused another error that I didn't want to deal with
-
-At this point, the baseline performs in 23.7min, instead of the official 24.5min. That might be due to the newer PyTorch version, `torch==2.9.0.dev20250824+cu126` (I ran the `pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu126 --upgrade` as in the instructions), or some other reason. It is consistent across runs on both 8xH100 by Prime Compute and by Hyperstack, so I don't believe that it's a hardware difference.
-
-However, the log of the most recent record includes a comment next to the `torch._inductor.config.coordinate_descent_tuning = True` flag: `# we have banned this flag for new records because it causes compilation to take 30min` which I only saw very late.
-
-Compilation didn't take 30 minutes for me even with the flag on:
-
-- I measured it once, and compilation + warmup steps together took 04m05s with the flag on, and 00m54s with the flag off
-- In my dozens of runs I never noticed it taking even close to half an hour
-
-So I don't really get the comment. Maybe it takes that long with the `compiled_autograd` flag on, but the baseline is still faster than the official record even without that. However, I still tested out the baseline and the two best settings (one and two additional value embeddings) without `coordinate_descent_tuning`. Here are the losses averaged over 5 runs each:
-
-![val loss with changed compile flags](images/val_loss_time_record.png)
-
-And clearly, adding one or two more value embeddings leads to a strong record, crossing the 2.92 validation loss threshold much earlier:
-
-- Baseline: 1465s &rarr; 24.42m
-- One additional value embedding: 1463s &rarr; 24.38m
-- Two additional value embeddings: 1439s &rarr; 23.98m
-
-This is the exact same speed difference (26s) between the baseline and two additional value embeddings.
-
-All experiments below were run with `coordinate_descent_tuning = True` though, because I performed them before reading that comment.
-
-> A note on the averaging: I very simply averaged the loss for each training step, and independently averaged the time taken at each training step, and then plotted the loss over the training time. That's not 100% mathematically correct because I'm averaging losses that happended after different amounts of time, but the averaging of the times should mostly make up for that, so the results are still valid (especially considering the large margin with which the record is set).
+I assume that the 4 additional value embeddings slot in nicely in this timed order (from best to worst): 2-1-0-3-4-5. So for one and two additional value embeddings, the additional loss reduction per step dominates over the additional per-step time, while above two additional value embeddings, the effect reverses.
 
 ## Removing value embeddings
 
