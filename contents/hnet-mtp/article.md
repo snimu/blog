@@ -61,7 +61,7 @@ In the forward pass, predicting the token at position `t-1` doesn't directly hel
 
 ### MTP: Backward pass
 
-In the backward pass, MTP approximates the effects of the H-Net's smoothing module. The difficulty of predicting the next token varies from position to position. MTP accumulates the gradients for more than one token into each position. Assuming a uniformly random prediction difficulty, and thus a uniformly random information density in the gradient, the accumulation of gradients from multiple positions into one will lead to a more Gaussian distribution of information density in the accumulated gradient, thanks to the central limit theorem. More Gaussian information density means less variable information density compared to uniformly random, because more weight is at the mean position.
+In the backward pass, MTP approximates the effects of the H-Net's smoothing module. The difficulty of predicting the next token varies from position to position. MTP accumulates the gradients for more than one token into each position. Assuming a uniformly random prediction difficulty, and thus a uniformly random information density in the gradient, the accumulation of gradients from multiple positions into one will lead to a reduced variance in prediction difficulty.
 
 And thus, MTP allows the model to learn closer to its maximum per-step learning capacity at every position in the input sequence.
 
