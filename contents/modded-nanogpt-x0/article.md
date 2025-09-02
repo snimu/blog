@@ -3732,54 +3732,110 @@ The full input sentence is `mail account: email@example.com\n- Emails will inclu
 
 </details>
 
-If you don't want to expand these results, you can instead look at this table:
+If you don't want to expand these results, I have also put them into a table. This is what the different symbols mean:
 
-| vector   | t0          | t1        | t2        | t3      | t4         | t5          | t6      | t7            | t8     | t9     | t10              | t11   |
-|----------|-------------|-----------|-----------|---------|------------|-------------|---------|---------------|--------|--------|------------------|-------|
-| input    | mail        | account   | :         | email   | @          | example     | .       | com           | \n     | -      | Emails           | will  |
-| x-0      | address     | ants      | http      | address | #$         | of          | \n      | /             | The    | based  | ensitive         | be    |
-| x-1      | sites       | Plays     | http      | hub     | �          | Usage       | \n      | <|endoftext|> | �      | The    | to               | not   |
-| x-2      | addresses   | websites  | |         | address | example    | )|          | |       | <|endoftext|> | |      | Posted | from             | be    |
-| x-3      | first       | first     | |         | @       | example    | ever        | |       | \n            | |      | 1      | from             | be    |
-| x-4      | )?          | resume    | The       | @       | div        | dot         | The     | )             | The    | PH     | from             | be    |
-| x-5      | Microsoft   | Microsoft | Microsoft | @       | subscriber | .;          | The     | /#            | The    | Date   | from             | be    |
-| x-6      | Microsoft   | >         | Date      | >       | pc         | dot         | I       | .             | The    | Date   | from             | be    |
-| x-7      | |           | |         | Date      | @       | nt         | .           | com     | \n            | The    | Date   | :                | be    |
-| x-8      | :           | .         | email     | @       | rav        | .           | com     | .             | The    | Posted | :                | be    |
-| x-9      | Today       | of        | Name      | @       | posted     | .           | com     | .             | The    | Posted | email            | be    |
-| x-10     | .-          | .         | Software  | @       | example    | dot         | |       | .             | The    | Date   | must             | be    |
-| x-11     | ribune      | ,         | mail      | @       | example    | .           | |       | .             | |      | Date   | :                | be    |
-| x-12     | .           | .         | mail      | @       | name       | .           | |       | .             | |      | A      | :                | be    |
-| x-13     | .           | .         | \n        | @       | example    | .           | gov     | .             | The    | What   | :                | be    |
-| x-14     | .           | .         | \n        | @       | example    | .           | com     | \n            | The    | What   | are              | be    |
-| x-15     | .           | of        | \n        | @       | example    | .           | com     | \n            | The    | Email  | sent             | be    |
-| x-out    | mail        | .         | \n        | @       | example    | .           | com     | \n            | -      | The    | to               | be    |
-| x00      | address     | ants      | http      | address | #$         | of          | \n      | /             | The    | based  | ensitive         | be    |
-| x01      | gery        | account   | :         | sts     | @          | urses       | .       | weet          | \n     | -      | =-=-=-=-=-=-=-=- | will  |
-| ve0      | board       | s         | IRO       | Grid    | pleasure   | Url         | aries   | someday       | shire  | ences  | need             | Tube  |
-| ve1      | CN          | peat      | desks     | ˈ       | ua         | ony         | atton   | vy            | emia   | ˈ      | ş                | hips  |
-| ve2      | gers        | scene     | herself   | assic   | 's         | ops         | ESS     | rians         | ball   | iary   | quo              | ?"    |
-| ve0_o0   | sites       | deposit   | our       | HR      | helm       | volunteers  | are     | ounces        | �      | budget | Google           | be    |
-| ve1_o1   | ].          | agy       | Hendricks | email   | w          | best        | entimes | CNBC          | opolis | avored | string           | be    |
-| ve2_o2   | email       | account   | Eye       | email   | @          | example     | quick   | acting        | quo    | -      | Emails           | be    |
-| ve0_o13  | newsletters | abilities | hide      | sender  | Thank      | documentary | .       | mitted        | \n     | -      | Podesta          | be    |
-| ve1_o14  | sender      | credited  | ;         | @       | @          | herself     | .       | endas         | "      | -      | Alert            | will  |
-| ve2_o15  | mail        | account   | :         | email   | @          | example     | lled    | com           | \n     | -      | Emails           | will  |
+> I replaced newlines with '\n' and space with '_'.
+
+- t{i} is the token at position i
+- 'vector' refers to the vector that is being decoded (plus the 'input' which are simply the raw input tokens)
+- x-{j} refers to x before the weighted sum with x00 and x01 at layer j
+- x-out is the output latent that is commonly decoded by the language head
+- ve0, ve1, and ve2 are the value embeddings of the tokens decoded by the language head
+- ve{i}_o{j} is ve{i} projected into the residual space via the output projection of the attention weight at layer {j}, then decoded by the language head
+
+| vector   | t0           | t1        | t2         | t3       | t4          | t5           | t6      | t7            | t8     | t9      | t10              | t11   |
+|----------|--------------|-----------|------------|----------|-------------|--------------|---------|---------------|--------|---------|------------------|-------|
+| input    | mail         | _account  | :          | _email   | @           | example      | .       | com           | \n     | -       | _Emails          | _will |
+| x-0      | _address     | ants      | _http      | _address | #$          | _of          | \n      | /             | The    | based   | ensitive         | _be   |
+| x-1      | _sites       | _Plays    | _http      | _hub     | �           | _Usage       | \n      | <|endoftext|> | _�     | _The    | _to              | _not  |
+| x-2      | _addresses   | _websites | |          | _address | example     | )|           | |       | <|endoftext|> | |      | _Posted | _from            | _be   |
+| x-3      | _first       | _first    | |          | @        | example     | ever         | |       | \n            | |      | _1      | _from            | _be   |
+| x-4      | )?           | _resume   | The        | @        | _div        | _dot         | The     | )             | The    | PH      | _from            | _be   |
+| x-5      | Microsoft    | Microsoft | Microsoft  | @        | _subscriber | .;           | The     | /#            | The    | Date    | _from            | _be   |
+| x-6      | Microsoft    | >         | Date       | >        | _pc         | _dot         | I       | .             | The    | _Date   | _from            | _be   |
+| x-7      | |            | |         | Date       | @        | nt          | .            | com     | \n            | The    | _Date   | :                | _be   |
+| x-8      | :            | .         | email      | @        | rav         | .            | com     | .             | The    | _Posted | :                | _be   |
+| x-9      | Today        | _of       | Name       | @        | posted      | .            | com     | .             | The    | _Posted | _email           | _be   |
+| x-10     | .-           | .         | Software   | @        | example     | _dot         | |       | .             | The    | _Date   | _must            | _be   |
+| x-11     | ribune       | ,         | mail       | @        | example     | .            | |       | .             | |      | _Date   | :                | _be   |
+| x-12     | .            | .         | mail       | @        | name        | .            | |       | .             | |      | _A      | :                | _be   |
+| x-13     | .            | .         | \n         | @        | example     | .            | gov     | .             | The    | _What   | :                | _be   |
+| x-14     | .            | .         | \n         | @        | example     | .            | com     | \n            | The    | _What   | _are             | _be   |
+| x-15     | .            | _of       | \n         | @        | example     | .            | com     | \n            | The    | _Email  | _sent            | _be   |
+| x-out    | mail         | .         | \n         | @        | example     | .            | com     | \n            | -      | _The    | _to              | _be   |
+| x00      | _address     | ants      | _http      | _address | #$          | _of          | \n      | /             | The    | based   | ensitive         | _be   |
+| x01      | gery         | _account  | :          | sts      | @           | urses        | .       | weet          | \n     | -       | =-=-=-=-=-=-=-=- | _will |
+| ve0      | board        | s         | IRO        | Grid     | _pleasure   | Url          | aries   | _someday      | shire  | ences   | _need            | _Tube |
+| ve1      | CN           | peat      | _desks     | ˈ        | ua          | ony          | atton   | vy            | emia   | ˈ       | ş                | hips  |
+| ve2      | gers         | scene     | _herself   | assic    | 's          | ops          | ESS     | rians         | ball   | iary    | _quo             | ?"    |
+| ve0_o0   | _sites       | _deposit  | _our       | _HR      | _helm       | _volunteers  | _are    | ounces        | _�     | _budget | Google           | _be   |
+| ve1_o1   | ].           | agy       | _Hendricks | _email   | w           | _best        | entimes | _CNBC         | opolis | avored  | string           | _be   |
+| ve2_o2   | _email       | _account  | _Eye       | _email   | @           | _example     | _quick  | acting        | _quo   | -       | _Emails          | _be   |
+| ve0_o13  | _newsletters | abilities | _hide      | _sender  | _Thank      | _documentary | .       | mitted        | \n     | -       | _Podesta         | _be   |
+| ve1_o14  | _sender      | _credited | ;          | @        | _@          | _herself     | .       | endas         | "      | -       | _Alert           | _will |
+| ve2_o15  | mail         | _account  | :          | _email   | @           | example      | lled    | com           | \n     | -       | _Emails          | _will |
 
 The first interesting result I'm seeing is for x00: while it's just the input embeddings, the language head interprets them as next-token predictions! "mail" &rarr; "address", "account" &rarr; "atns", etc. are all clear 1-gram next-token predictions.
 
-x01 sometimes contains a copy of the input, sometimes a seemingly random token. However, the top-10 predictions often include similarly-sounding or -written words, or variants. For example, the next prediction for " account" is `[' account', ' accounts', ' Account', 'account', 'nan', 'ban', 'rint', 'p']`. That's somewhat random, but some variant of "account" appears very often, and the other tokens make some sense for accounts as well: 'p' and 'rint' make 'print', 'nan' is a common value that accountants have to deal with, and an account can be banned as in 'ban'. It looks like x01 consists of a bunch of tokens that are just different writings of the input token, plus a bunch of loose associations.
+x01 sometimes contains a copy of the input, sometimes a seemingly random token. However, the top-10 predictions often include similarly-sounding or -written words, or variants. For example, the next prediction for " account" is `[' account', ' accounts', ' Account', 'account', 'nan', 'ban', 'rint', 'p']`. Some variant of "account" appears very often, and the other tokens make some sense for the token 'account' as well: 'p' and 'rint' make 'print', 'nan' is a common value that accountants have to deal with, and an account can be banned as in 'ban'. It looks like x01 consists of a bunch of tokens that are just different writings of the input token, plus a bunch of loose associations.
 
-So my first intermediate conclusion is that the language head treats the input embeddings of current tokens as embeddings of the next token for each, and x01 makes up for that by providing (very approximate) information about the input embeddings. I believe that this switch is caused by the value embeddings: the same value embeddings are applied to layers 0 and 13, and 1 and 14, and 2 and 15. So the same embeddings must perform some task early and late in the model, which means that it's likely valuable for the model to interpret them differently at different points of the model. This has the nice side-effect that it minimizes the amount of change to x required over the length of the model, because leaving it un-changed makes it simply the 1-gram next-token predictions.
+So my first intermediate conclusion is that the language head treats the input embeddings of current tokens as embeddings of the next token for each, and x01 makes up for that by providing information about and associations with the input embeddings. I believe that this switch is caused by the value embeddings: the same value embeddings are applied to layers 0 and 13, and 1 and 14, and 2 and 15. So the same embeddings must perform some task early and late in the model, which means that it's likely valuable for the model to interpret them differently at different points of the model. This has the nice side-effect that it minimizes the amount of change to x required over the length of the model, because leaving it un-changed makes it simply the 1-gram next-token predictions, which are already decent.
 
-The next observation is that x also makes next-token predictions. So if both x and x00 are next-token predictions, why is x00 removed from the residual at the last few layers? One possible adaptation to my hypothesis is this (guaranteed to be overly simplified again, and pretty likely to still be wrong):
+The next observation is that x also makes next-token predictions. One model of what's happening inside the model is:
 
 - x00 provides a 1-gram next-token prediction distribution at every layer of the model
 - In early layers, this helps the model pick a direction for x, by biasing it
 - In the last few layers, this prediction is substracted from x, to reduce the 1-gram bias which is of course sub-optimal, leaving only the refined x
 - x01 gives an approximate view of the input, and the contrast between it and the next-token predictions by x00 gives the model additional information about how exactly it needs to refine the vector to make the best possible predictions
 
-As for the value embeddings, they are (1) very different, and (2) make no sense. The latter isn't surprising; after all, they are applied inside the attention mechanism, not to the residual directly, so they are two transformations away from where the language head is usually applied. I just thought it would have been really interesting if they did make sense.
+As for the value embeddings, they are (1) very different, and (2) make no sense. The latter isn't surprising; after all, they are applied inside the attention mechanism, not to the residual directly, so they are two transformations away from where the language head is usually applied.
+
+However, when they are projected back into the residual stream with the output projections of the attention layers they are used in, the predictions suddenly make more sense again. It's also notable that the same value embedding clearly has different functions in each of the two layers it's used in, as projected back into the residual stream.
+
+Let's first look at ve0 at both layers 0 and 13:
+
+| vector   | t0           | t1        | t2    | t3      | t4     | t5           | t6   | t7     | t8   | t9      | t10      | t11   |
+|----------|--------------|-----------|-------|---------|--------|--------------|------|--------|------|---------|----------|-------|
+| input    | mail         | _account  | :     | _email  | @      | example      | .    | com    | \n   | -       | _Emails  | _will |
+| ve0_o0   | _sites       | _deposit  | _our  | _HR     | _helm  | _volunteers  | _are | ounces | _�   | _budget | Google   | _be   |
+| ve0_o13  | _newsletters | abilities | _hide | _sender | _Thank | _documentary | .    | mitted | \n   | -       | _Podesta | _be   |
+
+Some observations:
+
+- ve0_o0 seems to mostly play word association; not predictions, not exact copying of the inputs
+- ve0_o13 is similar, but a clearer mixture of somewhat sensible completions ("_account" + "abilities" = "_accountabilities"), associations ("mail" &rarr; "newsletters") and copying ("." &rarr; "."). There's also some apparent nonsense in there ("_Emails" &rarr; "_Podesta"), and "_will" is always followed by the prediction "_be"
+
+Unfortunately, I cannot see any super obvious patterns beyond those vague ones, so let's move on to ve1:
+
+| vector   | t0      | t1        | t2         | t3     | t4   | t5       | t6      | t7    | t8     | t9     | t10     | t11   |
+|----------|---------|-----------|------------|--------|------|----------|---------|-------|--------|--------|---------|-------|
+| input    | mail    | _account  | :          | _email | @    | example  | .       | com   | \n     | -      | _Emails | _will |
+| ve1_o1   | ].      | agy       | _Hendricks | _email | w    | _best    | entimes | _CNBC | opolis | avored | string  | _be   |
+| ve1_o14  | _sender | _credited | ;          | @      | _@   | _herself | .       | endas | "      | -      | _Alert  | _will |
+
+- For ve1_o1, the predictions are mostly nonsense. "_account" &rarr; "agy"? ":" &rarr; "_Hendricks"? "@" &rarr; "w"? The only predictions that make sense to me are copying "_email", "_will" &rarr; "_be", and *maybe* "com" &rarr; "_CNBC"
+- ve1_o14 on the other hand is clearly an association machine, which makes it a partial predictor. "mail" &rarr; "_sender", "_account" &rarr; "_credited", etc. All of these make sense.
+
+This leaves us with ve2:
+
+| vector   | t0     | t1       | t2   | t3     | t4   | t5       | t6     | t7     | t8   | t9   | t10     | t11   |
+|----------|--------|----------|------|--------|------|----------|--------|--------|------|------|---------|-------|
+| input    | mail   | _account | :    | _email | @    | example  | .      | com    | \n   | -    | _Emails | _will |
+| ve2_o2   | _email | _account | _Eye | _email | @    | _example | _quick | acting | _quo | -    | _Emails | _be   |
+| ve2_o15  | mail   | _account | :    | _email | @    | example  | lled   | com    | \n   | -    | _Emails | _will |
+
+- ve2_o2 is a mixture of association, copying, and prediction
+- ve2_o15 is a pure copying of the input information (with one screwup for "." &rarr; "lled")
+
+The last point is very important: it means that the model at its final layer has three embeddings available, which represent three things:
+
+- x00 represents the 1-gram next-token predictions
+- x01 represents associations with the input tokens, and tokens that are similar to the input tokens
+- ve2 represents the input tokens themselves
+
+In general, it seems to me like a lot of the point of these embeddings is to group tokens in different ways; partially to make up for the lack of byte-level information ("_account" &rarr; "_account" / "_accounts" / ...), partially to suggest semantic closeness ("_account" &rarr; "_deposit"), partially to give a view of the input data, and partially to suggest common completions.
+
+The different lambdas then allow the model to mix and match these embeddings, and the transformer layers allow it to dynamically apply corrections. That's speculation though, as I don't have any strong evidence for it besides the language head outputs for the different vectors (and I didn't look at all of them, only the subset that I've presented above).
 
 #### Norms
 
