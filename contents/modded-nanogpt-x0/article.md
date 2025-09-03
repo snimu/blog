@@ -3735,9 +3735,9 @@ There are some symbols which my terminal didn't properly render, but I noticed t
 
 </details>
 
-If you don't want to expand these results, I have also put them into a table. This is what the different symbols mean:
-
 > I replaced newlines with '\n' and space with '_'.
+
+If you don't want to expand these results, I have also put them into a table. This is what the different symbols mean:
 
 - t{i} is the token at position i
 - 'vector' refers to the vector that is being decoded (plus the 'input' which are simply the raw input tokens)
@@ -3842,22 +3842,43 @@ The different lambdas then allow the model to mix and match these embeddings, an
 
 ### Learned lambdas with multple added embeddings
 
-For the sake of completeness, let's look at the lambdas over the layers at the end of training, for different numbers of added embeddings at the input (all with three total value embeddings still).
+For the sake of completeness, let's look at the lambdas over the layers at the end of training, for different numbers of added embeddings at the input (all with three total value embeddings still). I forgot to save the activation norms unfortunately, so the scale of x isn't accurate (it's effectively rising over the layers). All the embeddings have the same norm though (because they were actively normed), so their relative lambdas are very meaningful.
 
 Here are the lambdas for two additional embeddings:
 
 ![lambdas: x00, x01, x02](images/1-layer.png)
 
-TODO
+This is unfortunately pretty noisy. I can see two trends though that we've seen before and will see again:
+
+1. x starts high, then falls sharply and stays constant. Again, this is just the lambda, ignoring the norm of the activations, so x is actually rising over the layers; but it is the trend for the lambdas
+2. x00 falls off sharply at the end
+3. The other lambdas differ clearly in some layers. In this case, x01 and x02 track closely in the first 10 layers, but then diverge quickly
 
 Now, here are the lambdas for three additional embeddings:
 
 ![lambdas: x00, x01, x02, x03](images/2-layer.png)
 
-TODO
+The same trends as before apply. Especially interesting is the fact that the relative weights of the lambdas for x01, x02, and x03 seem to shift in five distinct phases:
 
-And here are the lambdas with four additional embeddings:
+1. In the first layer (layer 0), they are all fairly high (though x and x00 have much higher lambdas, so they are low in relative terms)
+2. Then, they are close to zero for four layers while x00 slowly falls, up to and including layer 4
+3. Starting at layer 5, x01 and x02 become negative, while x03 stays close to zero and x00 continues to fall for four more layers
+4. Starting at layer 9, the values of x01 and x02 slowly go positive, while the value of x03 slowly goes negative and x00 stays constant for four more layers
+5. Starting at layer 13 (and a little bit at layer 12), the values of x00 and x01 fall off sharply, while those of x02 and x03 rise sharply for the last three layers
+
+I do not know what exactly is going on, and it would likely involve a lot of work to find out, but I find the pattern fascinating nevertheless.
+
+Now here are the lambdas with four additional embeddings:
 
 ![lambdas: x00, x01, x02, x03, x04](images/3-layer.png)
 
-TODO
+Similarly to the previous plot, the lambdas seem to change modes every few layers. However, it is chaotic enough that I'm not confident in naming specific mode boundaries; it's more of a visual feeling to me than something concrete.
+
+## Conclusion
+
+The main lessons I take away from this article are still speculative, but I believe that they are resonably supported by the data that was presented:
+
+1. An LLM can easily make use of many different embeddings. They enable the model to save more distinct statistics about the training dataset in the different embeddings, and apply them in varying ways at the different layers
+2. Biasing an LLM to produce workable next-token predictions even if the layers change nothing&mdash;which is assured by the embedding and lm-head producing 1-gram predictions, which in turn is learned because the model must be able to use the input embeddings productively at every layer&mdash;allows the model to apply the minimal change to the input embeddings in order to produce a low-loss prediction. I suspect that this makes learning easier because it makes the residual stream more consistent. Another way to look at this minimal-required-edit property is that it outsources the majority of the work to fixed statistics in the form of embeddings, while the transformer backend is only used for small dynamic adjustments
+
+I expect some people to disagree with me on this, so let me also state the clear facts: adding more embeddings and adding them in a learned weighted sum to the residual before every layer improves per-step performance consistently, and the input embeddings are interpreted as next-token predictions by the language head.
