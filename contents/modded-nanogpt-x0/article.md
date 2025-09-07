@@ -2,6 +2,8 @@
 
 [modded-nanogpt](https://github.com/KellerJordan/modded-nanogpt) adds the token-embedding x0 to the residual stream in a weighted sum before every layer. What happens if we create additional embeddings layers, and add more and more of them to the weighted sum?
 
+> I want to thank [PrimeIntellect](https://app.primeintellect.ai/), and specifically [Johannes Hagemann](https://x.com/johannes_hage), for generous GPU credits that supported these experiments.
+
 ## The setup
 
 For my record attempts, I used as a baseline my previous record (LINK). It increased the number of value embeddings from three to five, which allowed me to reduce the number of training steps. However, many experiments discussed in this article were run concurrently with the experiments that led to my previous record, so they will only use three value embeddings and more training steps.
@@ -23,6 +25,16 @@ for layer in self.layers:
 ```
 
 This article includes my record attempt (LINK, TODO), further [ablations about adding more embeddings](#validation-losses-when-varying-the-number-of-extra-embeddings), and an [attempt at interpretability work](#an-attempt-at-interpretability-work) to understand how the model makes use of the different components that are available to it.
+
+## The record attempts
+
+I first compared adding one additional embedding ("+ x01") and two ("+ x01, x02") to the baseline (again, the baseline is my previous record with five total value embeddings applied to ten layers). Here are the results:
+
+![Ablations for record](images/ablations_for_record.png)
+
+Clearly, adding a single new input-embedding will lead to a new record. So I ran a few tests to see on how much I could reduce the number of steps, and settled on 5675 (I unfortunately can't find the results of the runs with which I made that decision).
+
+TODO
 
 ## Validation losses when varying the number of extra embeddings
 
