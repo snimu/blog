@@ -3952,13 +3952,39 @@ I see multiple mechanisms that encourage this behavior of x00 being used as both
 
 So I tried two modifications of the model that might increase the pull to the minimal residual edit behavior: changing how the value embeddings are applied, and adding x00 right before the language head. Neither of them worked, but I will shortly go over the experiments and results below.
 
+Note that x00 is already decoded into next-token predictions without these changes, so at best they could have helped this property to develop earlier in training. The negative results therefore don't mean too much, they're just interesting (and helpful for others to avoid falling into the same traps).
+
 #### Changing the value embeddings
 
-TODO
+In the baseline, the value embeddings are tied like so:
+
+- Embedding 1 is applied to layers 0 and 11
+- Embedding 2 is applied to layers 1 and 12
+- Embedding 3 is applied to layers 2 and 13
+- Embedding 4 is applied to layers 3 and 14
+- Embedding 5 is applied to layers 4 and 15
+
+I thought it might be better to invert this like so:
+
+- Embedding 1 is applied to layers 0 and 15
+- Embedding 2 is applied to layers 1 and 14
+- Embedding 3 is applied to layers 2 and 13
+- Embedding 4 is applied to layers 3 and 12
+- Embedding 5 is applied to layers 4 and 11
+
+This would mean that the maximum distance between value embeddings is increased, and thus the pressure for the residual to be similar at the very first and very last layer inputs. This did not work though: over 17 runs, the mean final validation loss is 2.9196, compared to the 2.9194 without this change. This is a tiny, tiny bit worse, which means to me that the edit either changes nothing or makes things worse (most likely, it's hard to tell with such small differences).
+
+Looking back, this change doesn't affect the mean distance between the layers at which each value embedding is tied, so the whole idea was not super well thought out, but I wanted to leave in the ablation for the sake of completeness.
 
 #### Adding x00 to the output latent
 
-TODO
+Here are the losses over per training step for the baseline, and when I added x00 to the normed x at the output latent in a learned weighted sum, both averaged over two runs:
+
+![emb-lm-skip](images/val_loss_step_emb-lm-skip.png)
+
+Clearly, adding x00 to x reduces performance over the steps. Since it also adds overhead from the addition, it's definitely worse than the baseline.
+
+If I had to come up with an explanation, I would guess that the issue is that you should not touch the final transformer layer output. You can touch the residual before it, but not after, so it's very important for language modelling, at least when x00 and x01 are involved. And since x00 was already being decoded into next-token predictions without this architectural change, there is no advantage to it. However, I would not swear on this explanation; more experimentation would be required to make confident statements.
 
 ## Conclusion
 
