@@ -24,7 +24,7 @@ for layer in self.layers:
     x = layer(x)  # includes residual
 ```
 
-This article includes my record attempt (LINK, TODO), further [ablations about adding more embeddings](#validation-losses-when-varying-the-number-of-extra-embeddings), and an [attempt at interpretability work](#an-attempt-at-interpretability-work) to understand how the model makes use of the different components that are available to it.
+This article includes [my record attempt](#the-record-attempts), further [ablations about adding more embeddings](#validation-losses-when-varying-the-number-of-extra-embeddings), and an [attempt at interpretability work](#an-attempt-at-interpretability-work) to understand how the model makes use of the different components that are available to it.
 
 ## The record attempts
 
@@ -32,9 +32,55 @@ I first compared adding one additional embedding ("+ x01") and two ("+ x01, x02"
 
 ![Ablations for record](images/ablations_for_record.png)
 
-Clearly, adding a single new input-embedding will lead to a new record. So I ran a few tests to see on how much I could reduce the number of steps, and settled on 5675 (I unfortunately can't find the results of the runs with which I made that decision).
+Clearly, adding a single new input-embedding will lead to a new record. So I ran a few tests to see on how much I could reduce the number of steps, and settled on 5690.
 
-TODO
+Here are the resulting final validation losses over 19 runs:
+
+```python
+[2.919502, 2.91976, 2.920582, 2.919331, 2.919008, 2.919827, 2.918785, 2.918519, 2.919297, 2.920061, 2.918938, 2.919342, 2.918186, 2.920546, 2.91954, 2.919093, 2.918951, 2.919599, 2.919956]
+```
+
+And these are the basic stats:
+
+- Mean: 2.9194117368421053
+- Median: 2.919342
+- Std: 0.000613243648848653
+- Min: 2.918186
+- Max: 2.920582
+
+And t-test results:
+
+```python
+{
+    'n': 19,
+    'sample_mean': 2.9194117368421053,
+    'sample_std': 0.0006300479560324045,
+    't_stat': -4.069816643193549,
+    'p_value': 0.00035946114919240566,
+    'alpha': 0.05,
+    'decision': 'REJECT H0 (mean < threshold)',
+    'upper_conf_bound_mean': 2.919662383449226,
+    'threshold': 2.92
+}
+```
+
+The final loss is below 2.92 with >99% likelihood.
+
+Here are the corresponding run-times in seconds:
+
+```python
+[1414.299, 1412.033, 1411.668, 1421.735, 1411.998, 1411.094, 1412.637, 1410.047, 1410.509, 1412.048, 1411.574, 1415.299, 1411.649, 1412.94, 1412.508, 1410.912, 1415.296, 1410.778, 1407.511]
+```
+
+Leading to the following stats:
+
+- Mean: 1412.4492105263155
+- Median: 1411.998
+- Std: 2.8062021268488864
+- Min: 1407.511
+- Max: 1421.735
+
+The mean time is ~1412.5 seconds, or 23.54 minutes.
 
 ## Validation losses when varying the number of extra embeddings
 
@@ -3886,11 +3932,37 @@ Now here are the lambdas with four additional embeddings:
 
 Similarly to the previous plot, the lambdas seem to change modes every few layers. However, it is chaotic enough that I'm not confident in naming specific mode boundaries; it's more of a visual feeling to me than something concrete.
 
+### So why does adding more embeddings work?
+
+Again, the simplest explanation is that embeddings are cheap additional parameters.
+
+However, if I simply added the two embeddings together with equal weight at each layer (or only at the input), they would both receive an identical gradient, because the `backward` of addition is `copy`. Here are the reasons it still works:
+
+1. The embeddings are randomly initialized, so the gradients can still lead to different final embeddings
+2. The sum isn't constant; it's a *learned weighted sum at every layer*, which means that the relative weights of the embeddings can differ between the layers; thus, they *can* receive different gradients and thus fully make use of the additional model capacity
+
+At least in the models I've trained, this leads to an interesting separation of concerns between the embeddings, as discussed above. The part that stuck out most to me was the fact that x00 was decoded into next-token predictions. This means that the embedding and lm-head together are already an okay next-token predictor. It also means that the transformer layers only have to apply minimal edits to x00 in order to make the predictions much stronger. Deep Neural Networks love gradual edits (they are one of the nice things about residual connections), so this is great!
+
+I see multiple mechanisms that encourage this behavior of x00 being used as both inputs and predictions, in increasing order of importance (though I'm very uncertain about the order of the last two):
+
+1. The skip connections in the model. This is unlikely to be a large contributor, but it does shorten the effective model depth and could therefore plausibly encourage such behavior
+2. The value embeddings. There are multiple value embeddings (five for the record, three for my investigagions); each is applied to an early and a late layer; for example, layer 0 and layer 13. This means that in order to be useful at both layers, the residual at both layers has to be similar. This could be a fairly strong effect, but it is weakened by the fact that the value embeddings are only applied inside the attention operation, which means that they are fully separated from the residual stream by linear layers, and those layers could in principle make up for any difference in the representation of the residual stream
+3. It just makes sense. This "minimal residual edit" idea is clearly useful for transformers, so it is encouraged to develop. And in normal transformers, without any of the above architectural variations, we can still apply the language head at every layer and get a good prediction. See [the logit lens](https://www.lesswrong.com/posts/AcKRB8wDpdaN6v6ru/interpreting-gpt-the-logit-lens), which explicitly states that the model makes next-token predictions even after the first layer ("In the logit lens, the early layers sometimes look like nonsense, and sometimes look like very simple guesses about the output. They almost never look like the input"). The only difference to my results is that the early layers never *really* look like nonsense
+4. x00 (and x01). Having the same embeddings added to the residual stream before every single layer means that they have to be useful at every single layer; and the easiest way for that to happen is if the embedding layer and language head work together to produce a prediction already
+
+So I tried two modifications of the model that might increase the pull to the minimal residual edit behavior: changing how the value embeddings are applied, and adding x00 right before the language head. Neither of them worked, but I will shortly go over the experiments and results below.
+
+#### Changing the value embeddings
+
+TODO
+
+#### Adding x00 to the output latent
+
+TODO
+
 ## Conclusion
 
 The main lessons I take away from this article are still speculative, but I believe that they are resonably supported by the data that was presented:
 
 1. An LLM can easily make use of many different embeddings. They enable the model to save more distinct statistics about the training dataset in the different embeddings, and apply them in varying ways at the different layers
 2. Biasing an LLM to produce workable next-token predictions even if the layers change nothing&mdash;which is assured by the embedding and lm-head producing 1-gram predictions, which in turn is learned because the model must be able to use the input embeddings productively at every layer&mdash;allows the model to apply the minimal change to the input embeddings in order to produce a low-loss prediction. I suspect that this makes learning easier because it makes the residual stream more consistent. Another way to look at this minimal-required-edit property is that it outsources the majority of the work to fixed statistics in the form of embeddings, while the transformer backend is only used for small dynamic adjustments
-
-I expect some people to disagree with me on this, so let me also state the clear facts: adding more embeddings and adding them in a learned weighted sum to the residual before every layer improves per-step performance consistently, and the input embeddings are interpreted as next-token predictions by the language head.
