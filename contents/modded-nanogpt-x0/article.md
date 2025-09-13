@@ -6,7 +6,7 @@
 
 ## The setup
 
-For my record attempts, I used as a baseline my previous record (LINK). It increased the number of value embeddings from three to five, which allowed me to reduce the number of training steps. However, many experiments discussed in this article were run concurrently with the experiments that led to my previous record, so they will only use three value embeddings and more training steps.
+For my record attempts, I used as a baseline my previous record (LINK). It increased the number of value embeddings from three to five, which allowed me to reduce the number of training steps. However, all experiments discussed in this article but the actual record attempt were run concurrently with the experiments that led to my previous record, so they will only use three value embeddings and more training steps.
 
 The ablations in this article concern adding more embeddings, and adding them in the following way to the residual stream before applying the transformer layer, for every layer:
 
@@ -80,9 +80,11 @@ Leading to the following stats:
 - Min: 1407.511
 - Max: 1421.735
 
-The mean time is ~1412.5 seconds, or 23.54 minutes.
+The mean time is ~1412.5 seconds, or 23.54 minutes. My previous record was 23.8 minutes, and the official record before that 24.5 minutes.
 
 ## Validation losses when varying the number of extra embeddings
+
+Before that record attempt, I performed several ablations. The first was adding more and more embeddings; from one to four additional ones.
 
 Let's first look at the validation losses per step, zoomed in so we can see something:
 
@@ -92,7 +94,7 @@ The obvious pattern that emerges is that with each additional embedding layer, t
 
 ![Validation losses over time, seconds 1400-1550](images/val_loss-time-1400-1550.png)
 
-What immediately jumps out is that beyond two additional embeddings, the performance per time-step degrades quickly. And even before that, the baseline is clearly the best throughout the majority of training. However, toward the very end, two runs with added embeddings seem to actually be better: x01 and x02. The differences are tiny though, and I chalk them up to random chance.
+What immediately jumps out is that beyond two additional embeddings, the performance per time-step degrades quickly. And even before that, the baseline is clearly the best throughout the majority of training. However, toward the very end, two runs with added embeddings seemed to actually be better: x01 and x02. The differences are tiny though, and I chalked them up to random chance; still, this is what led me to perform the further experiments that led to my record.
 
 Below, I will try to determine how the model uses the additional embedding to improve its per-step (and, depending on the flag, per-time-step) performance.
 
@@ -3898,7 +3900,7 @@ In general, it seems to me like a lot of the point of these embeddings is to gro
 
 The different lambdas then allow the model to mix and match these embeddings, and the transformer layers allow it to dynamically apply corrections. That's speculation though, as I don't have any strong evidence for it besides the language head outputs for the different vectors (and I didn't look at all of them, only the subset that I've presented above).
 
-### Learned lambdas with multple added embeddings
+### Learned lambdas with multiple added embeddings
 
 For the sake of completeness, let's look at the lambdas over the layers at the end of training, for different numbers of added embeddings at the input (all with three total value embeddings still). I forgot to save the activation norms unfortunately, so the scale of x isn't accurate (it's effectively rising over the layers). All the embeddings have the same norm though (because they were actively normed), so their relative lambdas are very meaningful.
 
@@ -3916,7 +3918,7 @@ Now, here are the lambdas for three additional embeddings:
 
 ![lambdas: x00, x01, x02, x03](images/2-layer.png)
 
-The same trends as before apply. Especially interesting is the fact that the relative weights of the lambdas for x01, x02, and x03 seem to shift in five distinct phases:
+The same trends as before apply. Especially interesting is the fact that the relative weights of the lambdas for x01, x02, and x03 seem to shift in five distinct phases, with the shifts occuring after a fairly consistent number of layers each:
 
 1. In the first layer (layer 0), they are all fairly high (though x and x00 have much higher lambdas, so they are low in relative terms)
 2. Then, they are close to zero for four layers while x00 slowly falls, up to and including layer 4
@@ -3943,14 +3945,16 @@ However, if I simply added the two embeddings together with equal weight at each
 
 At least in the models I've trained, this leads to an interesting separation of concerns between the embeddings, as discussed above. The part that stuck out most to me was the fact that x00 was decoded into next-token predictions. This means that the embedding and lm-head together are already an okay next-token predictor. It also means that the transformer layers only have to apply minimal edits to x00 in order to make the predictions much stronger. Deep Neural Networks love gradual edits (they are one of the nice things about residual connections), so this is great!
 
-I see multiple mechanisms that encourage this behavior of x00 being used as both inputs and predictions, in increasing order of importance (though I'm very uncertain about the order of the last two):
+> While a name for this phenomenon might already exist, I don't know it, so I'll call it "minimum residual effort"
+
+I thought about mechanisms that encourage this behavior of x00 being used as both inputs and predictions. I tested some of them (we will get to that soon), based on this list of my guesses for responsible architecture details, presented in increasing order of importance (though I'm very uncertain about all of this, and especially the order of the last two):
 
 1. The skip connections in the model. This is unlikely to be a large contributor, but it does shorten the effective model depth and could therefore plausibly encourage such behavior
 2. The value embeddings. There are multiple value embeddings (five for the record, three for my investigagions); each is applied to an early and a late layer; for example, layer 0 and layer 13. This means that in order to be useful at both layers, the residual at both layers has to be similar. This could be a fairly strong effect, but it is weakened by the fact that the value embeddings are only applied inside the attention operation, which means that they are fully separated from the residual stream by linear layers, and those layers could in principle make up for any difference in the representation of the residual stream
-3. It just makes sense. This "minimal residual edit" idea is clearly useful for transformers, so it is encouraged to develop. And in normal transformers, without any of the above architectural variations, we can still apply the language head at every layer and get a good prediction. See [the logit lens](https://www.lesswrong.com/posts/AcKRB8wDpdaN6v6ru/interpreting-gpt-the-logit-lens), which explicitly states that the model makes next-token predictions even after the first layer ("In the logit lens, the early layers sometimes look like nonsense, and sometimes look like very simple guesses about the output. They almost never look like the input"). The only difference to my results is that the early layers never *really* look like nonsense
+3. It just makes sense. This minimum residual effort idea is clearly useful for transformers, so it is encouraged to develop. And in normal transformers, without any of the above architectural variations, we can still apply the language head at every layer and get a good prediction. See [the logit lens](https://www.lesswrong.com/posts/AcKRB8wDpdaN6v6ru/interpreting-gpt-the-logit-lens), which explicitly states that the model makes next-token predictions even after the first layer ("In the logit lens, the early layers sometimes look like nonsense, and sometimes look like very simple guesses about the output. They almost never look like the input"). The only difference to my results is that the early layers never *really* look like nonsense
 4. x00 (and x01). Having the same embeddings added to the residual stream before every single layer means that they have to be useful at every single layer; and the easiest way for that to happen is if the embedding layer and language head work together to produce a prediction already
 
-So I tried two modifications of the model that might increase the pull to the minimal residual edit behavior: changing how the value embeddings are applied, and adding x00 right before the language head. Neither of them worked, but I will shortly go over the experiments and results below.
+So I tried two modifications of the model that might increase the pull to the minimum residual effort behavior: changing how the value embeddings are applied, and adding x00 right before the language head. Neither of them worked, but I will shortly go over the experiments and results below.
 
 Note that x00 is already decoded into next-token predictions without these changes, so at best they could have helped this property to develop earlier in training. The negative results therefore don't mean too much, they're just interesting (and helpful for others to avoid falling into the same traps).
 
@@ -3991,4 +3995,4 @@ If I had to come up with an explanation, I would guess that the issue is that yo
 The main lessons I take away from this article are still speculative, but I believe that they are resonably supported by the data that was presented:
 
 1. An LLM can easily make use of many different embeddings. They enable the model to save more distinct statistics about the training dataset in the different embeddings, and apply them in varying ways at the different layers
-2. Biasing an LLM to produce workable next-token predictions even if the layers change nothing&mdash;which is assured by the embedding and lm-head producing 1-gram predictions, which in turn is learned because the model must be able to use the input embeddings productively at every layer&mdash;allows the model to apply the minimal change to the input embeddings in order to produce a low-loss prediction. I suspect that this makes learning easier because it makes the residual stream more consistent. Another way to look at this minimal-required-edit property is that it outsources the majority of the work to fixed statistics in the form of embeddings, while the transformer backend is only used for small dynamic adjustments
+2. That an LLM produces workable next-token predictions even if the layers change nothing allows it to apply the minimal change to the input embeddings in order to produce a low-loss prediction. I suspect that this makes learning easier because it makes the residual stream more consistent. Another way to look at this minimum residual effort property is that it outsources the majority of the work to fixed statistics of the training dataset in the form of embeddings, while the transformer backend is only used for small dynamic adjustments. I suspect that adding x0 to the residual at the input of every layer encourages the minimum residual effort property
