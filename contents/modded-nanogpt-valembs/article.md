@@ -138,3 +138,23 @@ I did wonder if the structure of sharing value embeddings across many layers (so
 ![8, 11, 12, 13](images/8-11-12-13-time-1200-1500.png)
 
 When we remove a full embedding layer, it is better to keep the interleaved structure where the value embeddings are shared between early and late layers, not between adjacent layers. Additionally, it is worse to share the same value embedding between three layers than it is to share it between two layers, even though the toal number of parameters stays constant.
+
+Another way of sharing the value embeddings differently is to let invert the application of the value embeddings in the early layers. I performed this experiment with the full five value embeddings, and over 17 runs.
+
+Before, the value embeddings are tied like so:
+
+- Embedding 1 is applied to layers 0 and 11
+- Embedding 2 is applied to layers 1 and 12
+- Embedding 3 is applied to layers 2 and 13
+- Embedding 4 is applied to layers 3 and 14
+- Embedding 5 is applied to layers 4 and 15
+
+I thought it might be better to invert this like so:
+
+- Embedding 1 is applied to layers 0 and 15
+- Embedding 2 is applied to layers 1 and 14
+- Embedding 3 is applied to layers 2 and 13
+- Embedding 4 is applied to layers 3 and 12
+- Embedding 5 is applied to layers 4 and 11
+
+This did not work though: over 17 runs, the mean final validation loss is 2.9196, compared to the 2.9194 without this change. This is a tiny, tiny bit worse, which means to me that the edit either changes nothing or makes things worse (though it's hard to tell with such small differences).
