@@ -1,4 +1,4 @@
-# modded-nanogpt: Embeddings Extravaganza 2 (x00-x04)
+# modded-nanogpt world record: Decoupling embedding size from model dimension
 
 [modded-nanogpt](https://github.com/KellerJordan/modded-nanogpt) adds the token-embedding x0 to the residual stream in a weighted sum before every layer. What happens if we create additional embeddings layers, and add more and more of them to the weighted sum?
 
@@ -135,11 +135,11 @@ The first is that the effects discussed above are very strongly visible even in 
 
 The second is that in layer 8, the weight of x rises sharply, and that of x00 drops off a cliff. I assume that that's due to layer 7 not having an attention block, only an MLP, and since an MLP just approximates a dynamic embeddings layer for mixed tokens, it will be able to replace x00 at this point, but with more contextualized and thus more valuable information (because there were attention layers before it). I would guess that this makes x00 a distraction compared to what the MLP already adds to the residual stream, necessitating it to be set to approximately zero.
 
-### Applying the language head
+### Logit lens
 
-To explain these phenomena, I applied the language head to different vectors in the model: x at every layer, x00 and x01, and the value embeddings.
+To explain these phenomena, I applied the language head to different vectors in the model: x at every layer, x00 and x01, and the value embeddings, like in [the logit lens](https://www.lesswrong.com/posts/AcKRB8wDpdaN6v6ru/interpreting-gpt-the-logit-lens).
 
-Firstly, and most importantly, I took 128 input tokens, ran a forward pass over them, and saved the top-10 predictions for x (at the input of the every layer, before it'a mixed with x00, x01, or the value embeddings; and at the position it's usually decoded from, after all the blocks), x00, x01, and the value-embeddings ve0, ve1, and ve2. You can find the full ten predictions under [predictions.md](https://github.com/snimu/modded-nanogpt-experiments/blob/main/experiments/00004-x0/predictions.md), together with the predicted probability for each token, and the code that produced the results [at this file](https://github.com/snimu/modded-nanogpt-experiments/blob/main/experiments/00004-x0/runs/4-2025-08-22-x00-x01-with-word-logging.py). Below, I simply show the most likely next token at each position, for each of the different components.
+I took 128 input tokens, ran a forward pass over them, and saved the top-10 predictions for x (at the input of the every layer, before it'a mixed with x00, x01, or the value embeddings; and at the position it's usually decoded from, after all the blocks), x00, x01, and the value-embeddings ve0, ve1, and ve2. You can find the full ten predictions under [predictions.md](https://github.com/snimu/modded-nanogpt-experiments/blob/main/experiments/00004-x0/predictions.md), together with the predicted probability for each token, and the code that produced the results [at this file](https://github.com/snimu/modded-nanogpt-experiments/blob/main/experiments/00004-x0/runs/4-2025-08-22-x00-x01-with-word-logging.py). Below, I simply show the most likely next token at each position, for each of the different components; and an even more compact table.
 
 The dictionary shows one sub-dictionary for each component (x, x00, etc.). Each of these subdictionaries maps from the token position to another sub-sub-dictionary, which in turn maps from the true input tokens at each position to the most likely next token as decoded from each component by the language head.
 
@@ -3902,7 +3902,7 @@ The different lambdas then allow the model to mix and match these embeddings, an
 
 ### Learned lambdas with multiple added embeddings
 
-For the sake of completeness, let's look at the lambdas over the layers at the end of training, for different numbers of added embeddings at the input (all with three total value embeddings still). I forgot to save the activation norms unfortunately, so the scale of x isn't accurate (it's effectively rising over the layers). All the embeddings have the same norm though (because they were actively normed), so their relative lambdas are very meaningful.
+Let's look at the lambdas over the layers at the end of training, for different numbers of added embeddings at the input (all with three total value embeddings still). I forgot to save the activation norms unfortunately, so the scale of x isn't accurate (it's effectively rising over the layers). All the embeddings have the same norm though (because they were actively normed), so their relative lambdas are very meaningful.
 
 Here are the lambdas for two additional embeddings:
 
@@ -3945,54 +3945,31 @@ However, if I simply added the two embeddings together with equal weight at each
 
 At least in the models I've trained, this leads to an interesting separation of concerns between the embeddings, as discussed above. The part that stuck out most to me was the fact that x00 was decoded into next-token predictions. This means that the embedding and lm-head together are already an okay next-token predictor. It also means that the transformer layers only have to apply minimal edits to x00 in order to make the predictions much stronger. Deep Neural Networks love gradual edits (they are one of the nice things about residual connections), so this is great!
 
-> While a name for this phenomenon might already exist, I don't know it, so I'll call it "minimum residual effort"
+And it should have been obvious to me, because [the logit lens](https://www.lesswrong.com/posts/AcKRB8wDpdaN6v6ru/interpreting-gpt-the-logit-lens) explicitly showed this a long time ago. Still, it's neat to see that the model makes use of this property very strongly.
 
-I thought about mechanisms that encourage this behavior of x00 being used as both inputs and predictions. I tested some of them (we will get to that soon), based on this list of my guesses for responsible architecture details, presented in increasing order of importance (though I'm very uncertain about all of this, and especially the order of the last two):
+#### Bonus experiment: Adding x00 to the output latent
 
-1. The skip connections in the model. This is unlikely to be a large contributor, but it does shorten the effective model depth and could therefore plausibly encourage such behavior
-2. The value embeddings. There are multiple value embeddings (five for the record, three for my investigagions); each is applied to an early and a late layer; for example, layer 0 and layer 13. This means that in order to be useful at both layers, the residual at both layers has to be similar. This could be a fairly strong effect, but it is weakened by the fact that the value embeddings are only applied inside the attention operation, which means that they are fully separated from the residual stream by linear layers, and those layers could in principle make up for any difference in the representation of the residual stream
-3. It just makes sense. This minimum residual effort idea is clearly useful for transformers, so it is encouraged to develop. And in normal transformers, without any of the above architectural variations, we can still apply the language head at every layer and get a good prediction. See [the logit lens](https://www.lesswrong.com/posts/AcKRB8wDpdaN6v6ru/interpreting-gpt-the-logit-lens), which explicitly states that the model makes next-token predictions even after the first layer ("In the logit lens, the early layers sometimes look like nonsense, and sometimes look like very simple guesses about the output. They almost never look like the input"). The only difference to my results is that the early layers never *really* look like nonsense
-4. x00 (and x01). Having the same embeddings added to the residual stream before every single layer means that they have to be useful at every single layer; and the easiest way for that to happen is if the embedding layer and language head work together to produce a prediction already
-
-So I tried two modifications of the model that might increase the pull to the minimum residual effort behavior: changing how the value embeddings are applied, and adding x00 right before the language head. Neither of them worked, but I will shortly go over the experiments and results below.
-
-Note that x00 is already decoded into next-token predictions without these changes, so at best they could have helped this property to develop earlier in training. The negative results therefore don't mean too much, they're just interesting (and helpful for others to avoid falling into the same traps).
-
-#### Changing the value embeddings
-
-In the baseline, the value embeddings are tied like so:
-
-- Embedding 1 is applied to layers 0 and 11
-- Embedding 2 is applied to layers 1 and 12
-- Embedding 3 is applied to layers 2 and 13
-- Embedding 4 is applied to layers 3 and 14
-- Embedding 5 is applied to layers 4 and 15
-
-I thought it might be better to invert this like so:
-
-- Embedding 1 is applied to layers 0 and 15
-- Embedding 2 is applied to layers 1 and 14
-- Embedding 3 is applied to layers 2 and 13
-- Embedding 4 is applied to layers 3 and 12
-- Embedding 5 is applied to layers 4 and 11
-
-This would mean that the maximum distance between value embeddings is increased, and thus the pressure for the residual to be similar at the very first and very last layer inputs. This did not work though: over 17 runs, the mean final validation loss is 2.9196, compared to the 2.9194 without this change. This is a tiny, tiny bit worse, which means to me that the edit either changes nothing or makes things worse (most likely, it's hard to tell with such small differences).
-
-Looking back, this change doesn't affect the mean distance between the layers at which each value embedding is tied, so the whole idea was not super well thought out, but I wanted to leave in the ablation for the sake of completeness.
-
-#### Adding x00 to the output latent
-
-Here are the losses over per training step for the baseline, and when I added x00 to the normed x at the output latent in a learned weighted sum, both averaged over two runs:
+I also tried adding x00 to the normed x at the output latent in a learned weighted sum. Normally, we only add these embeddings to the *inputs* of transformer layers, but here I've added one of them to the *output*  of the last layer. I had planned on doing similar ablations as [above](#validation-losses-when-varying-the-number-of-extra-embeddings), but this setting destroyed the model performance so much that I just didn't bother; see below(losses averaged over 2 runs each):
 
 ![emb-lm-skip](images/val_loss_step_emb-lm-skip.png)
 
 Clearly, adding x00 to x reduces performance over the steps. Since it also adds overhead from the addition, it's definitely worse than the baseline.
 
-If I had to come up with an explanation, I would guess that the issue is that you should not touch the final transformer layer output. You can touch the residual before it, but not after, so it's very important for language modelling, at least when x00 and x01 are involved. And since x00 was already being decoded into next-token predictions without this architectural change, there is no advantage to it. However, I would not swear on this explanation; more experimentation would be required to make confident statements.
+My initial explanation for this is that the last MLP is essential for making sense of the actual combinatin of embeddings, and that is missing in this approach. In other words, don't touch the output with static embeddings.
 
-## Conclusion
+## On scaling
 
-The main lessons I take away from this article are still speculative, but I believe that they are resonably supported by the data that was presented:
+Since I have no experience in scaling LLMs to large sizes (and I haven't done the experiments), this section is full on speculation.
 
-1. An LLM can easily make use of many different embeddings. They enable the model to save more distinct statistics about the training dataset in the different embeddings, and apply them in varying ways at the different layers
-2. That an LLM produces workable next-token predictions even if the layers change nothing allows it to apply the minimal change to the input embeddings in order to produce a low-loss prediction. I suspect that this makes learning easier because it makes the residual stream more consistent. Another way to look at this minimum residual effort property is that it outsources the majority of the work to fixed statistics of the training dataset in the form of embeddings, while the transformer backend is only used for small dynamic adjustments. I suspect that adding x0 to the residual at the input of every layer encourages the minimum residual effort property
+Anyway, I can imagine that this technique of adding more embedding layers will scale fairly well, for two reasons:
+
+- As the model gets wider, adding the extra embeddings costs less and less relative to the matrix products, because the cost of scalar addition scales linearly with the model dimension, while the cost of matrix multiplication rises quadratically. And since the embeddings themselves are just lookup tables, producing them will always be comparatively cheap
+- As the model gets deeper, I expect that the number of embedding layers that can be added productively to increase. That's because as the number of layers increases, the number of different combinations of these embeddings that can be used inside the model increases
+
+Effectively, this method of increasing the number of input embeddings and doing a learned weighted sum between them and the residual at every layer input *decouples the possible embedding size from the model dimension* (if we count the interpolation between multiple embeddings as one big embeddings, which I'm not completely sure about mathematically, but which makes sense).
+
+It's kind of the equivalent of [Mixture of Softmaxes](https://arxiv.org/abs/1809.09296), which performs multiple linear transformations of the output latents, applies the language head and softmax to all of them, and then sums the results up (where the weights of the sum add up to one to keep the final output a probability distribution).
+
+## Summary
+
+I have achieved a modded-nanogpt medium world record, and performed some basic interpretability work using the logit lens. I suspect that the method is fairly general and scales well.
