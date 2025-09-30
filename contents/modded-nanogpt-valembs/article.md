@@ -32,7 +32,7 @@ I re-ran the baseline, because I slightly changed the compile flags and used a n
 
 ![New record: validation loss over time](images/25-26-record-time.png)
 
-With the two additional value embeddings, the model reaches the target loss in ~35 fewer seconds.
+With the two additional value embeddings, the model reaches the target loss in ~21 fewer seconds.
 
 > A note on the averaging: I very simply averaged the loss for each training step, and independently averaged the time taken at each training step, and then plotted the loss over the training time. That's not 100% mathematically correct because I'm averaging losses that happended after different amounts of time, but the averaging of the times should mostly make up for that, so the results are still valid (especially considering the large margin with which the record is set).
 
@@ -158,3 +158,9 @@ I thought it might be better to invert this like so:
 - Embedding 5 is applied to layers 4 and 11
 
 This did not work though: over 17 runs, the mean final validation loss is 2.9196, compared to the 2.9194 without this change. This is a tiny, tiny bit worse, which means to me that the edit either changes nothing or makes things worse (though it's hard to tell with such small differences).
+
+## Conclusion
+
+Value embeddings are a powerful way to add bias to LLMs. In the case of the modded-nanogpt medium speedrun, adding two in the pattern of the existing value embeddings leads to a new world record, reducing the runtime by ca. 21 seconds.
+
+The original pattern of applying the same value embeddings in the same order in the first and last few layers seems optimal.
