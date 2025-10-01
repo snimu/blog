@@ -1,6 +1,10 @@
 # modded-nanogpt medium World Record: Reusing intermediate activations in the output latents
 
-...
+I have a new world record for the modded-nanogpt speedrunning medium track.
+
+It involves the re-use of activations from earlier layers at the output latent via a learned weighted sum.
+
+This article will describe that record, as well as multiple other experiments.
 
 ## The record
 
@@ -11,6 +15,8 @@ skip_lambdas = self.scalars[-2:]
 x = norm(x) * skip_lambdas[0] + norm(skip_connections[11]) * skip_lambdas[1]
 ```
 
+Where the `skip_connections` contain the output latents of each layer, at the corresponding position.
+
 These are the resulting final validation losses over 10 runs:
 
 ```python
@@ -19,8 +25,8 @@ These are the resulting final validation losses over 10 runs:
 
 And here are simple stats about the final validation loss over these 10 runs:
 
-- Mean: 2.9186430000000003
-- Std: 0.0008985292921708256
+- Mean: 2.9186
+- Std: 0.0008985
 - P-value: 0.0005035724941803675
 
 The p-value is very low, so after only 10 runs we can be sure that the target loss is reached.
@@ -34,7 +40,7 @@ Now here are the corresponding run times:
 And here are some simple stats about the times:
 
 - Mean: 1378.8641 seconds ~= 22.98 minutes
-- Std: 0.4177190576345865 seconds
+- Std: 0.4177 seconds
 
 The previous record's time is 1405.698 seconds, so this is a reduction of almost 27 seconds.
 
