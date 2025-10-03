@@ -46,7 +46,7 @@ And here are some simple stats about the times:
 
 The previous record's time is 1405.698 seconds, so this is a reduction of almost 27 seconds.
 
-## Lambdas
+### Lambdas
 
 We don't just perform a sum between the outputs of layers 11 and 15, but a weighted sum; and those scalar weights are learned. So what values do they take?
 
@@ -63,6 +63,36 @@ Every layer that is not the output layer has the job of providing context to the
 
 The final lambdas in these experiments are evidence for that hypothesis: the output of layer 11 is actively removed from the residual stream after layer 15, which should allow layer 11 to only focus on providing context to layer 12.
 
+### Norms
+
+Before my record, `x` was RMS normed right before applying the language head:
+
+```python
+...  # apply the layers
+x = norm(x)
+...  # apply the language head
+```
+
+But in my adapted version, I multiply `x` by a scalar value before decoding it:
+
+```python
+...  # apply the layers
+x = norm(x) * l_x + norm(x_skip) * l_skip
+...  # apply the language head
+```
+
+where `l_x` and `l_skip` are the abbreviated lambdas.
+
+Would norming again after the sum help? Theoretically, the language head should be able to just learn to incorporate the constant factor from the lambdas and be fine, but sometimes learning dynamics are weird and don't work out like that. So I tried the following:
+
+```python
+...  # apply the layers
+x = norm(norm(x) * l_x + norm(x_skip) * l_skip)
+...  # apply the language head
+```
+
+But it made no difference at all, so it's fine to leave out this last norm. If anything, it made performance worse; but only very, very slightly, which means nothing when done for a single run, so I wouldn't take that too seriously.
+
 ## Adding more than one layer output
 
 TODO: everything!
@@ -70,8 +100,6 @@ TODO: everything!
 TODO: iff final two or three layer lambdas are positive and the rest are negative&mdash;a.k.a. the final few layers are actively doing prediction, while the previous ones only provide context&mdash;could we simply run them in parallel and then do a learned weighted sum over their outputs?
 
 TODO: Are the magnitudes of lambdas from early layers lower than those from late layers? Because their impact on the output is reduced, so less of the impact has to be removed.
-
-TODO: Should we have a weighted sum over the current activation and the activation at layer l-n, every m steps? l: layer-num, n: skip-distance, m: skip-cadence. Then the layers can really focus only on providing context for the next layer. We could even set n=m=1; then each layer's output will have the previous layer's output removed from it and can fully provide context to the next layer.
 
 ## The path to the record
 
