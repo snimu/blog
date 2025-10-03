@@ -8,6 +8,8 @@ This article will describe that record, as well as multiple other experiments.
 
 ## The record
 
+TODO: enter numbers for updated record with 5550 steps and more runs
+
 I simply added the output of layer 11 (the 12'th layer) to the output of the final layer (layer 15, or the 16'th layer), in a weighted sum. The weights are scalars and are learned. This just means that right before applying the language head, I do this:
 
 ```python
@@ -44,6 +46,33 @@ And here are some simple stats about the times:
 
 The previous record's time is 1405.698 seconds, so this is a reduction of almost 27 seconds.
 
+## Lambdas
+
+We don't just perform a sum between the outputs of layers 11 and 15, but a weighted sum; and those scalar weights are learned. So what values do they take?
+
+TODO: add average over many runs; add plots of lambdas over the course of training
+
+Let's first look at a single run and its final lambdas. It ran for 5550 steps; the final loss is 2.919; and the total time 1384 seconds (23 minutes). Here are the lambdas:
+
+- Layer 15 (x-lambda): 0.828
+- Layer 11 (skip-lambda): -0.292
+
+This all but confirms a hypothesis by [Larry Dial](https://github.com/ClassicLarry) which he shared in a [comment](https://github.com/KellerJordan/modded-nanogpt/pull/138#issuecomment-3362739273) in the first PR I made about this record (which I closed to re-open a new one, because the first one was sloppy). His hypothesis is this (in my own words):
+
+Every layer that is not the output layer has the job of providing context to the next layer so that it can do its job better. But each layer output is also present in the final output latents, due to the residual stream. Thus, it directly impacts the final prediction, and the layers all perform the dual jobs of providing context and making a prediction, which might not always be the same.
+
+The final lambdas in these experiments are evidence for that hypothesis: the output of layer 11 is actively removed from the residual stream after layer 15, which should allow layer 11 to only focus on providing context to layer 12.
+
+## Adding more than one layer output
+
+TODO: everything!
+
+TODO: iff final two or three layer lambdas are positive and the rest are negative&mdash;a.k.a. the final few layers are actively doing prediction, while the previous ones only provide context&mdash;could we simply run them in parallel and then do a learned weighted sum over their outputs?
+
+TODO: Are the magnitudes of lambdas from early layers lower than those from late layers? Because their impact on the output is reduced, so less of the impact has to be removed.
+
+TODO: Should we have a weighted sum over the current activation and the activation at layer l-n, every m steps? l: layer-num, n: skip-distance, m: skip-cadence. Then the layers can really focus only on providing context for the next layer. We could even set n=m=1; then each layer's output will have the previous layer's output removed from it and can fully provide context to the next layer.
+
 ## The path to the record
 
 In the time I spent experimenting with the changes explained above and below, another record was achived in [PR#137](https://github.com/KellerJordan/modded-nanogpt/pull/137). For the final attempt that you saw above, I of course included these changes, but I had previously attempted the record without them.
@@ -74,16 +103,18 @@ Here's an old plot I made of the learning rate and sequence length over the cour
 
 This is from when training still took 5960 steps. What you can see is that both the learning rate and the sequence length change toward the end of training. Now imagine that you see a loss curve over 5960 steps, and you notice that the target loss of 2.92 is hit after only 5890 steps. Then that 2.92 loss value occurs when the learning rate is slightly higher and the sequence length slightly shorter.
 
-My guess is that this impacts the amount of loss reduction per step.
+My guess was that this impacts the amount of loss reduction per step.
 
 So which of the two is it?
 
 - The learning rate changes only very slightly with small changes in step counts. However, the slope of its reduction over training gets more aggressive, which could have an additional impact
-- The sequence length changes pretty strongly in the last few training steps, so this should make a big difference. My guess is that this is the main culprit of the issue (if any of the two are; I haven't experimentally verified anything yet)
+- The sequence length changes pretty strongly in the last few training steps, so this should make a big difference. My guess was that this is the main culprit of the issue
 
-If the issue is actually the sequence length (which, again, I don't know for sure!), then that's strange; the validation loss is computed at the full sequence length, so why does ending training in a lower sequence length reduce the final validation loss? I'm leaning far out the window now, but my guess would be that if this is the case, the reason is that the model is simply undertrained and cannot make use of the the increased sequence length&mdash;or that the maximum sequence length is seen for too short a time.
+If the issue is actually the sequence length, then that's strange; the validation loss is computed at the full sequence length, so why does ending training in a lower sequence length reduce the final validation loss?
 
-I might play around with this at some point. For now, on to more experimental results!
+And indeed, in my one experiment where I schduled the sequence length as if there were still 5960 steps, the final loss was 2.922, so slightly worse than keeping the original schedule.
+
+I tried something similar with the learning rate and it too didn't work either, so I am now stumped as to what causes this strange behavior.
 
 ### Why I chose layer 11
 
