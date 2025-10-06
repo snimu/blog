@@ -4,6 +4,7 @@ Adding more value-embeddings to [modded-nanogpt](https://github.com/KellerJordan
 
 In this article, I present these results, and a lot more ablations of experiments that didn't work out. Here's a table of contents:
 
+- [What are value embeddings?](#what-are-value-embeddings)
 - [The record](#the-record)
 - [Adding value embeddings](#adding-value-embeddings)
 - [Removing value embeddings](#removing-value-embeddings)
@@ -12,15 +13,45 @@ In this article, I present these results, and a lot more ablations of experiment
 
 You can find the reproducible code [at this link](https://github.com/snimu/modded-nanogpt-experiments/tree/main/experiments/00003-value-embeddings).
 
-## The record
+## What are value embeddings?
 
-The best setting I've found is adding two more value embeddings, in the same tied manner as before. The baseline has the following value embeddings:
+In modded-nanogpt, there are multiple embedding layers. There is, of course, the input embedding which jumpstarts the residual, and which is transformed through the transformer layers. But there are also the value embeddings.
+
+They are applied inside the attention block. Specifically, an embedding module is used to produce embeddings from the token IDs, and those embeddings are then added to the values in the attention module. Simplified, this is how this looks in code:
+
+```python
+def attention_with_value_embeddings(
+        input_ids: torch.Tensor,  # B, T
+        x: torch.Tensor,  # B, T, D
+        value_emb: nn.Embedding,
+        lambdas: torch.Tensor,  # 2
+        W_q: nn.Parameter,  # D, D
+        W_k: nn.Parameter,  # D, D
+        W_v: nn.Parameter,  # D, D
+) -> torch.Tensor:
+    q = rope(F.linear(x, W_q))
+    k = rope(F.linear(x, W_k))
+    v = F.linear(x, W_v)
+
+    ### Here come the value embeddings
+    v_embs = value_emb(input_ids)  # B, T, D
+    v = lambdas[0] * v + lambdas[1] * v_embs  # <- add value embeddings to values
+    ### ------------------------------
+
+    ...  # apply attention
+```
+
+The lambdas are learned scalar weights.
+
+It's important to note that the value embeddings are shared between multiple layers. In the baseline, there are three value embedding modules; each produces embeddings that are used in two layers:
 
 - One applied to layers 0 and 13
 - One applied to layers 1 and 14
 - One applied to layers 2 and 15
 
-I have added two more value embeddings in the following way:
+## The record
+
+I have added two more value embeddings to the model, so that the five total value embeddings are now applied in the following way:
 
 - One applied to layers 0 and 11
 - One applied to layers 1 and 12
@@ -97,7 +128,7 @@ This seems almost monotonous, except for adding four additional value embeddings
 
 I would interpret this as "more value embeddings lead to more learning per step", but the training run when I added 4 additional value embeddings was an outlier. I assume it would fit in nicely with the others in the trend if run multiple times.
 
-I assume that the 4 additional value embeddings slot in nicely in this timed order (from best to worst): 2-1-0-3-4-5. So for one and two additional value embeddings, the additional loss reduction per step dominates over the additional per-step time, while above two additional value embeddings, the effect reverses.
+I assume that the 4 additional value embeddings also slot in nicely in this timed order (from best to worst): 2-1-0-3-4-5. So for one and two additional value embeddings, the additional loss reduction per step dominates over the additional per-step time, while above two additional value embeddings, the effect reverses.
 
 ## Removing value embeddings
 
@@ -117,7 +148,7 @@ Before that, let's look at what happens if we remove multiple layers at once tho
 
 The two conclusions I can draw are that (1) the early value embeddings are definitely valuable and (2) the more of them are removed, the worse the result.
 
-How about removing full value embeddings? So removing the shared value embedding from layers 0 and 13, or 1 and 14, or 2 and 15; this time compared to removing layers 0 and 1 (because that's also not adding value embeddings at two layers, but it keeps all the parameters):
+How about removing full value embeddings? Meaning removing the shared value embedding from layers 0 and 13, or 1 and 14, or 2 and 15; this time compared to removing layers 0 and 1 (because that's also not adding value embeddings at two layers, but it keeps all the parameters):
 
 ![6, 8, 9, 10, 13](images/6-8-9-10-13-time-1200-1500.png)
 
@@ -139,7 +170,7 @@ I did wonder if the structure of sharing value embeddings across many layers (so
 
 When we remove a full embedding layer, it is better to keep the interleaved structure where the value embeddings are shared between early and late layers, not between adjacent layers. Additionally, it is worse to share the same value embedding between three layers than it is to share it between two layers, even though the toal number of parameters stays constant.
 
-Another way of sharing the value embeddings differently is to let invert the application of the value embeddings in the early layers. I performed this experiment with the full five value embeddings, and over 17 runs.
+Another way of sharing the value embeddings differently is to invert the application of the value embeddings in the early layers. I performed this experiment with the full five value embeddings, and over 17 runs.
 
 Before, the value embeddings are tied like so:
 
