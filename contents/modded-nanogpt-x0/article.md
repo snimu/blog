@@ -1,6 +1,6 @@
 # modded-nanogpt world record: Decoupling embedding size from model dimension
 
-I have achieved an (not yet official) [modded-nanogpt](https://github.com/KellerJordan/modded-nanogpt) medium track world record.
+I have achieved an (not yet official) [modded-nanogpt](https://github.com/KellerJordan/modded-nanogpt) medium track [world record](https://github.com/KellerJordan/modded-nanogpt/pull/124).
 
 The technique is simple: embed the token sequence using multiple independent embedding layers. Then, perform a weighted sum over these embeddings and the residual stream at the input to every transformer layer. The weights are learned, and differ from layer to layer.
 
