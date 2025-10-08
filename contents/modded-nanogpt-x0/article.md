@@ -4,11 +4,20 @@ I have achieved an (not yet official) [modded-nanogpt](https://github.com/Keller
 
 The technique is simple: embed the token sequence using multiple independent embedding layers. Then, perform a weighted sum over these embeddings and the residual stream at the input to every transformer layer. The weights are learned, and differ from layer to layer.
 
-I believe that this effectively allows for a decoupling between embedding and model dimension, and I' guessing that it's a pretty scalable technique. This article will consist of the following sections:
+I believe that this effectively allows for a decoupling between embedding and model dimension, and I have hope that it's a pretty scalable technique. This article will consist of the following sections:
 
 - [The status quo - modded-nanogpt medium before the record](#the-status-quo---modded-nanogpt-medium-before-the-record)
 - [The record](#the-record)
 - [Adding more embeddings: ablation](#adding-more-embeddings-ablation)
+- [An attempt at interpretability work](#an-attempt-at-interpretability-work)
+  - [Learned lambdas for one additional embedding](#learned-lambdas-for-one-additional-embedding)
+  - [Learned lambdas with multiple added embeddings](#learned-lambdas-with-multiple-added-embeddings)
+  - [Logit lens](#logit-lens)
+  - [So why does adding more embeddings work?](#so-why-does-adding-more-embeddings-work)
+- [Bonus experiment: Adding x00 to the output latent](#bonus-experiment-adding-x00-to-the-output-latent)
+- [On scaling](#on-scaling)
+- [Summary](#summary)
+- [Appendix](#appendix)
 
 > I want to thank [PrimeIntellect](https://app.primeintellect.ai/), and specifically [Johannes Hagemann](https://x.com/johannes_hage), for generous GPU credits that supported these experiments.
 
@@ -16,7 +25,7 @@ I believe that this effectively allows for a decoupling between embedding and mo
 
 ## The record
 
-For my record attempts, I used as a baseline my previous record (LINK). It increased the number of value embeddings from three to five, which allowed me to reduce the number of training steps. However, all experiments discussed in this article but the actual record attempt were run concurrently with the experiments that led to my previous record, so they will only use three value embeddings and more training steps.
+For my record attempts, I used as a baseline [my previous record](https://snimu.github.io/2025/10/07/modded-nanogpt-value-embeddings.html). It increased the number of value embeddings from three to five, which allowed me to reduce the number of training steps. However, all experiments discussed in this article but the actual record attempt were run concurrently with the experiments that led to my previous record, so they will only use three value embeddings and more training steps.
 
 The ablations in this article concern adding more embeddings, and adding them in the following way to the residual stream before applying the transformer layer, for every layer:
 
@@ -93,7 +102,7 @@ To me, the most interesting part about these results is that adding more embeddi
 
 I will mostly limit myself to adding only a single embedding (x01), started from the old baseline with only three value embeddings. I will use multiple tools to tease out the function of the different compontents of the model, starting with looking at the learned lambdas, a.k.a. the scalar weights of the weighted sum of inputs.
 
-### Learned lambdas for one additional embeddings
+### Learned lambdas for one additional embedding
 
 Here's how the lambdas for x, x00, and x01 look at the end of training for the different layers, averaged over 5 runs (because they are a bit noisy):
 
@@ -282,7 +291,7 @@ Again, the simplest explanation is that embeddings are cheap additional paramete
 
 However, if I simply added the two embeddings together with equal weight at each layer (or only at the input), they would have no more expressive power than a single embedding layer.
 
-The explanation for why it works is that the weights of the weighted sum is different for each layer, so each layer gets a different combination of the embeddings. [ClassicLarry](LINK) said it best in [this comment on my PR](LINK):
+The explanation for why it works is that the weights of the weighted sum is different for each layer, so each layer gets a different combination of the embeddings. [Larry Dial](https://github.com/ClassicLarry) said it best in [this comment on my PR](https://github.com/KellerJordan/modded-nanogpt/pull/124#issuecomment-3282878227):
 
 > This accomplishes a very cool dynamic. Basically you have gotten rid of the concept of a token embedding vector. Instead of representing a token as a fixed point in d_model dimensional space, you have added a degree of freedom where a token embedding is represented by interpolating between two points defined by embed1 and embed2, and the interpolation point varies by layer.
 
@@ -307,11 +316,11 @@ Since I have no experience in scaling LLMs to large sizes (and I haven't done th
 Anyway, I can imagine that this technique of adding more embedding layers will scale fairly well, for two reasons:
 
 - As the model gets wider, adding the extra embeddings costs less and less relative to the matrix products, because the cost of scalar addition scales linearly with the model dimension, while the cost of matrix multiplication rises quadratically. And since the embeddings themselves are just lookup tables, producing them will always be comparatively cheap
-- As the model gets deeper, I expect that the number of embedding layers that can be added productively to increase. That's because as the number of layers increases, the number of different combinations of these embeddings that can be used inside the model increases
+- As the model gets deeper, I expect that the number of embedding layers that can be added productively to increase. That's because as the number of layers increases, so does the number of different combinations of these embeddings that can be used inside the model
 
-Effectively, this method of increasing the number of input embeddings and doing a learned weighted sum between them and the residual at every layer input *decouples the possible embedding size from the model dimension* (if we count the interpolation between multiple embeddings as one big embeddings, which I'm not completely sure about mathematically, but which makes sense).
+Effectively, this method of increasing the number of input embeddings and doing a learned weighted sum between them and the residual at every layer input *decouples the possible embedding size from the model dimension*.
 
-It's kind of the equivalent of [Mixture of Softmaxes](https://arxiv.org/abs/1809.09296), which performs multiple linear transformations of the output latents, applies the language head and softmax to all of them, and then sums the results up (where the weights of the sum add up to one to keep the final output a probability distribution).
+What might destroy the method is parallelizability, which I know too little about to be able to make any sort of judgement.
 
 ## Summary
 
