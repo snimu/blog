@@ -1,10 +1,20 @@
 # modded-nanogpt world record: Decoupling embedding size from model dimension
 
-[modded-nanogpt](https://github.com/KellerJordan/modded-nanogpt) adds the token-embedding x0 to the residual stream in a weighted sum before every layer. What happens if we create additional embeddings layers, and add more and more of them to the weighted sum?
+I have achieved an (not yet official) [modded-nanogpt](https://github.com/KellerJordan/modded-nanogpt) medium track world record.
+
+The technique is simple: embed the token sequence using multiple independent embedding layers. Then, perform a weighted sum over these embeddings and the residual stream at the input to every transformer layer. The weights are learned, and differ from layer to layer.
+
+I believe that this effectively allows for a decoupling between embedding and model dimension, and I' guessing that it's a pretty scalable technique. This article will consist of the following sections:
+
+- [The status quo - modded-nanogpt medium before the record](#the-status-quo---modded-nanogpt-medium-before-the-record)
+- [The record](#the-record)
+- [Adding more embeddings: ablation](#adding-more-embeddings-ablation)
 
 > I want to thank [PrimeIntellect](https://app.primeintellect.ai/), and specifically [Johannes Hagemann](https://x.com/johannes_hage), for generous GPU credits that supported these experiments.
 
-## The setup
+## The status quo - modded-nanogpt medium before the record
+
+## The record
 
 For my record attempts, I used as a baseline my previous record (LINK). It increased the number of value embeddings from three to five, which allowed me to reduce the number of training steps. However, all experiments discussed in this article but the actual record attempt were run concurrently with the experiments that led to my previous record, so they will only use three value embeddings and more training steps.
 
@@ -24,11 +34,7 @@ for layer in self.layers:
     x = layer(x)  # includes residual
 ```
 
-This article includes [my record attempt](#the-record-attempts), further [ablations about adding more embeddings](#validation-losses-when-varying-the-number-of-extra-embeddings), and an [attempt at interpretability work](#an-attempt-at-interpretability-work) to understand how the model makes use of the different components that are available to it.
-
-## The record attempts
-
-I first compared adding one additional embedding ("+ x01") and two ("+ x01, x02") to the baseline (again, the baseline is my previous record with five total value embeddings applied to ten layers). Here are the results:
+For my first experiment, I compared adding one additional embedding ("+ x01") and two ("+ x01, x02") to the baseline (again, the baseline is my previous record with five total value embeddings applied to ten layers). Here are the results:
 
 ![Ablations for record](images/ablations_for_record.png)
 
@@ -42,27 +48,11 @@ Here are the resulting final validation losses over 19 runs:
 
 And these are the basic stats:
 
-- Mean: 2.9194117368421053
+- T-test p-value: 0.000359461
+- Mean: 2.9194117 ± 0.00063
 - Median: 2.919342
-- Std: 0.000613243648848653
 - Min: 2.918186
 - Max: 2.920582
-
-And t-test results:
-
-```python
-{
-    'n': 19,
-    'sample_mean': 2.9194117368421053,
-    'sample_std': 0.0006300479560324045,
-    't_stat': -4.069816643193549,
-    'p_value': 0.00035946114919240566,
-    'alpha': 0.05,
-    'decision': 'REJECT H0 (mean < threshold)',
-    'upper_conf_bound_mean': 2.919662383449226,
-    'threshold': 2.92
-}
-```
 
 The final loss is below 2.92 with >99% likelihood.
 
@@ -74,17 +64,16 @@ Here are the corresponding run-times in seconds:
 
 Leading to the following stats:
 
-- Mean: 1412.4492105263155
+- Mean: 1412.449 ± 2.8062
 - Median: 1411.998
-- Std: 2.8062021268488864
 - Min: 1407.511
 - Max: 1421.735
 
-The mean time is ~1412.5 seconds, or 23.54 minutes. My previous record was 23.8 minutes, and the official record before that 24.5 minutes.
+The mean time is ~1412.5 seconds (23.54 minutes). This is a reduction of 36.5 seconds compared to the previous record's 1449 seconds.
 
-## Validation losses when varying the number of extra embeddings
+## Adding more embeddings: ablation
 
-Before that record attempt, I performed several ablations. The first was adding more and more embeddings; from one to four additional ones.
+Before that record attempt, I performed an ablation on adding more and more embeddings. Note that the loss curves shown below are for a single run each, so chance plays a part.
 
 Let's first look at the validation losses per step, zoomed in so we can see something:
 
@@ -94,21 +83,19 @@ The obvious pattern that emerges is that with each additional embedding layer, t
 
 ![Validation losses over time, seconds 1400-1550](images/val_loss-time-1400-1550.png)
 
-What immediately jumps out is that beyond two additional embeddings, the performance per time-step degrades quickly. And even before that, the baseline is clearly the best throughout the majority of training. However, toward the very end, two runs with added embeddings seemed to actually be better: x01 and x02. The differences are tiny though, and I chalked them up to random chance; still, this is what led me to perform the further experiments that led to my record.
+It looks like the performance per time-step degrades quickly beyond two additional embeddings. And even before that, the baseline is clearly the best throughout the majority of training. However, toward the very end, two runs with added embeddings seemed to actually be better: x01 and x02. The differences are tiny though, and I chalked them up to random chance; still, this is what led me to perform the further experiments that led to my record.
 
 Below, I will try to determine how the model uses the additional embedding to improve its per-step (and, depending on the flag, per-time-step) performance.
 
 ## An attempt at interpretability work
 
-To me, the most interesting part about these results is that adding more embedding layers just keeps improving model performance per step. In some sense, that's expected, because embedding layers are cheap additional parameters. On the other hand, I do find it somewhat surprising: these embeddings look at each token individually, so on their own they can at best achieve 1-gram accuracy, which is bad. They must help the model learn to make better use of the main layers somehow; let's look at how they do this.
+To me, the most interesting part about these results is that adding more embedding layers just keeps improving model performance per step. In some sense, that's expected, because embedding layers are cheap additional parameters. On the other hand, I do find it somewhat surprising: these embeddings look at each token individually, so on their own they can at best achieve 1-gram accuracy, which is bad. They must help the model learn to make better use of the transformer layers somehow; let's look at how they do this.
 
 I will mostly limit myself to adding only a single embedding (x01), started from the old baseline with only three value embeddings. I will use multiple tools to tease out the function of the different compontents of the model, starting with looking at the learned lambdas, a.k.a. the scalar weights of the weighted sum of inputs.
 
 ### Learned lambdas for one additional embeddings
 
-My expectation was that x00 will be high in the beginning and low in the end; and that x01 will be low in the beginning and high in the end. I expected this to be a continuous change. The reason is that I expected x00 to contain training statistics about the input embeddings, a clean representation of what the tokens mean, while x01 contains 1-gram statistics about the most likely next token-distribution given a single token. Then, x00 would become less useful over the layers and x01 more useful (though I didn't expect this separation of concerns to be nearly this clean or one-dimensional).
-
-Here's how the lambdas for x, x00, and x01 acutally look at the end of training for the different layers, averaged over 5 runs (because they are a bit noisy):
+Here's how the lambdas for x, x00, and x01 look at the end of training for the different layers, averaged over 5 runs (because they are a bit noisy):
 
 ![x00, x01: mean over 5 runs](images/0-layer-mean5.png)
 
@@ -133,20 +120,209 @@ I can see two noteworthy phenomena.
 
 The first is that the effects discussed above are very strongly visible even in the normalized plot, which is good to know.
 
-The second is that in layer 8, the weight of x rises sharply, and that of x00 drops off a cliff. I assume that that's due to layer 7 not having an attention block, only an MLP, and since an MLP just approximates a dynamic embeddings layer for mixed tokens, it will be able to replace x00 at this point, but with more contextualized and thus more valuable information (because there were attention layers before it). I would guess that this makes x00 a distraction compared to what the MLP already adds to the residual stream, necessitating it to be set to approximately zero.
+The second is that in layer 8, the weight of x rises sharply, and that of x00 drops off a cliff. I assume that that's due to layer 7 not having an attention block, only an MLP. Since an MLP just approximates an embeddings layer that takes combinations of tokens, it will be able to replace x00 at this point. But since an MLP has far more capacity than an embedding layer (and more context due to the previous layers), it will be able to do so much better. I would guess that this makes x00 a distraction compared to what the MLP already adds to the residual stream, necessitating it to be set to approximately zero.
+
+### Learned lambdas with multiple added embeddings
+
+Let's look at the lambdas over the layers at the end of training, for different numbers of added embeddings at the input (all with three total value embeddings still). I forgot to save the activation norms unfortunately, so the scale of x isn't accurate (it's effectively rising over the layers). All the embeddings have the same norm though (because they were actively normed), so their relative lambdas are very meaningful.
+
+Here are the lambdas for two additional embeddings:
+
+![lambdas: x00, x01, x02](images/1-layer.png)
+
+This is unfortunately pretty noisy. I can see two trends though that we've seen before and will see again:
+
+1. x starts high, then falls sharply and stays constant. Again, this is just the lambda, ignoring the norm of the activations, so x is actually rising over the layers; but it is at least the trend for the lambda
+2. x00 falls off sharply at the end
+3. The other lambdas differ clearly in some layers. In this case, x01 and x02 track closely in the first 10 layers, but then diverge quickly
+
+Now, here are the lambdas for three additional embeddings:
+
+![lambdas: x00, x01, x02, x03](images/2-layer.png)
+
+The same trends as before apply. Especially interesting is the fact that the relative weights of the lambdas for x01, x02, and x03 seem to shift in five distinct phases, with the shifts occuring after a fairly consistent number of layers each:
+
+1. In the first layer (layer 0), they are all fairly high (though x and x00 have much higher lambdas, so they are low in relative terms)
+2. Then, they are close to zero for four layers while x00 slowly falls, up to and including layer 4
+3. Starting at layer 5, x01 and x02 become negative, while x03 stays close to zero and x00 continues to fall for four more layers
+4. Starting at layer 9, the values of x01 and x02 slowly go positive, while the value of x03 slowly goes negative and x00 stays constant for four more layers
+5. Starting at layer 13 (and a little bit at layer 12), the values of x00 and x01 fall off sharply, while those of x02 and x03 rise sharply for the last three layers
+
+This is a cool dynamic, and my guess is that this is what enables the additional embeddings layers to improve performance. More on that later.
+
+Now here are the lambdas with four additional embeddings:
+
+![lambdas: x00, x01, x02, x03, x04](images/3-layer.png)
+
+Similarly to the previous plot, the lambdas seem to change modes every few layers. However, it is chaotic enough that I'm not confident in naming specific mode boundaries; it's more of a visual feeling to me than something concrete.
 
 ### Logit lens
 
-To explain these phenomena, I applied the language head to different vectors in the model: x at every layer, x00 and x01, and the value embeddings, like in [the logit lens](https://www.lesswrong.com/posts/AcKRB8wDpdaN6v6ru/interpreting-gpt-the-logit-lens).
+To explain these phenomena, I used [the logit lens](https://www.lesswrong.com/posts/AcKRB8wDpdaN6v6ru/interpreting-gpt-the-logit-lens); concretely, I applied the language head to different vectors in the model: x at every layer, x00 and x01, and the value embeddings.
 
-I took 128 input tokens, ran a forward pass over them, and saved the top-10 predictions for x (at the input of the every layer, before it'a mixed with x00, x01, or the value embeddings; and at the position it's usually decoded from, after all the blocks), x00, x01, and the value-embeddings ve0, ve1, and ve2. You can find the full ten predictions under [predictions.md](https://github.com/snimu/modded-nanogpt-experiments/blob/main/experiments/00004-x0/predictions.md), together with the predicted probability for each token, and the code that produced the results [at this file](https://github.com/snimu/modded-nanogpt-experiments/blob/main/experiments/00004-x0/runs/4-2025-08-22-x00-x01-with-word-logging.py). Below, I simply show the most likely next token at each position, for each of the different components; and an even more compact table.
+I took 128 random input tokens from an unseen part of the train set (so the test set?), ran a forward pass over them, and saved the top-10 predictions for the following vectors:
 
-The dictionary shows one sub-dictionary for each component (x, x00, etc.). Each of these subdictionaries maps from the token position to another sub-sub-dictionary, which in turn maps from the true input tokens at each position to the most likely next token as decoded from each component by the language head.
+- The residual x at the input of every layer, before it'a mixed with x00, x01, or the value embeddings; and at the position it's usually decoded from, after all the blocks
+- The embeddings x00 and x01
+- The value-embeddings ve0, ve1, and ve2
+- The value-embeddings after they have been projected back into the space of the residual stream via `W_o`
+
+You can find the full ten predictions under [predictions.md](https://github.com/snimu/modded-nanogpt-experiments/blob/main/experiments/00004-x0/predictions.md), together with the predicted probability for each token, and the code that produced the results [at this file](https://github.com/snimu/modded-nanogpt-experiments/blob/main/experiments/00004-x0/runs/4-2025-08-22-x00-x01-with-word-logging.py). In the [Appendix](#appendix), I simply show the most likely next token at each position, for each of the different components; and below, an even more compact table.
 
 There are some symbols which my terminal didn't properly render, but I noticed too late. I believe it's just the "'" sign.
 
+> I replaced newlines with '\n' and space with '_'.
+
+This is what the different symbols mean:
+
+- t{i} is the token at position i
+- 'vector' refers to the vector that is being decoded (plus the 'input' which are simply the raw input tokens)
+- x-{j} refers to x before the weighted sum with x00 and x01 at layer j
+- x-out is the output latent that is commonly decoded by the language head
+- ve0, ve1, and ve2 are the value embeddings of the tokens decoded by the language head
+- ve{i}_o{j} is ve{i} projected into the residual space via the output projection of the attention weight at layer {j}, then decoded by the language head
+
+| vector   | t0           | t1        | t2         | t3       | t4          | t5           | t6      | t7            | t8     | t9      | t10              | t11   |
+|----------|--------------|-----------|------------|----------|-------------|--------------|---------|---------------|--------|---------|------------------|-------|
+| input    | mail         | _account  | :          | _email   | @           | example      | .       | com           | \n     | -       | _Emails          | _will |
+| x-0      | _address     | ants      | _http      | _address | #$          | _of          | \n      | /             | The    | based   | ensitive         | _be   |
+| x-1      | _sites       | _Plays    | _http      | _hub     | �           | _Usage       | \n      | <|endoftext|> | _�     | _The    | _to              | _not  |
+| x-2      | _addresses   | _websites | |          | _address | example     | )|           | |       | <|endoftext|> | |      | _Posted | _from            | _be   |
+| x-3      | _first       | _first    | |          | @        | example     | ever         | |       | \n            | |      | _1      | _from            | _be   |
+| x-4      | )?           | _resume   | The        | @        | _div        | _dot         | The     | )             | The    | PH      | _from            | _be   |
+| x-5      | Microsoft    | Microsoft | Microsoft  | @        | _subscriber | .;           | The     | /#            | The    | Date    | _from            | _be   |
+| x-6      | Microsoft    | >         | Date       | >        | _pc         | _dot         | I       | .             | The    | _Date   | _from            | _be   |
+| x-7      | |            | |         | Date       | @        | nt          | .            | com     | \n            | The    | _Date   | :                | _be   |
+| x-8      | :            | .         | email      | @        | rav         | .            | com     | .             | The    | _Posted | :                | _be   |
+| x-9      | Today        | _of       | Name       | @        | posted      | .            | com     | .             | The    | _Posted | _email           | _be   |
+| x-10     | .-           | .         | Software   | @        | example     | _dot         | |       | .             | The    | _Date   | _must            | _be   |
+| x-11     | ribune       | ,         | mail       | @        | example     | .            | |       | .             | |      | _Date   | :                | _be   |
+| x-12     | .            | .         | mail       | @        | name        | .            | |       | .             | |      | _A      | :                | _be   |
+| x-13     | .            | .         | \n         | @        | example     | .            | gov     | .             | The    | _What   | :                | _be   |
+| x-14     | .            | .         | \n         | @        | example     | .            | com     | \n            | The    | _What   | _are             | _be   |
+| x-15     | .            | _of       | \n         | @        | example     | .            | com     | \n            | The    | _Email  | _sent            | _be   |
+| x-out    | mail         | .         | \n         | @        | example     | .            | com     | \n            | -      | _The    | _to              | _be   |
+| x00      | _address     | ants      | _http      | _address | #$          | _of          | \n      | /             | The    | based   | ensitive         | _be   |
+| x01      | gery         | _account  | :          | sts      | @           | urses        | .       | weet          | \n     | -       | =-=-=-=-=-=-=-=- | _will |
+| ve0      | board        | s         | IRO        | Grid     | _pleasure   | Url          | aries   | _someday      | shire  | ences   | _need            | _Tube |
+| ve1      | CN           | peat      | _desks     | ˈ        | ua          | ony          | atton   | vy            | emia   | ˈ       | ş                | hips  |
+| ve2      | gers         | scene     | _herself   | assic    | 's          | ops          | ESS     | rians         | ball   | iary    | _quo             | ?"    |
+| ve0_o0   | _sites       | _deposit  | _our       | _HR      | _helm       | _volunteers  | _are    | ounces        | _�     | _budget | Google           | _be   |
+| ve1_o1   | ].           | agy       | _Hendricks | _email   | w           | _best        | entimes | _CNBC         | opolis | avored  | string           | _be   |
+| ve2_o2   | _email       | _account  | _Eye       | _email   | @           | _example     | _quick  | acting        | _quo   | -       | _Emails          | _be   |
+| ve0_o13  | _newsletters | abilities | _hide      | _sender  | _Thank      | _documentary | .       | mitted        | \n     | -       | _Podesta         | _be   |
+| ve1_o14  | _sender      | _credited | ;          | @        | _@          | _herself     | .       | endas         | "      | -       | _Alert           | _will |
+| ve2_o15  | mail         | _account  | :          | _email   | @           | example      | lled    | com           | \n     | -       | _Emails          | _will |
+
+**x00**, the input embeddings, are interpreted by the language head as next-token-predictions: "mail" &rarr; "address", "account" &rarr; "atns", etc. are all clear 1-gram next-token predictions. This has been noted by the original logit lens article already, so it's nice to see it confirmed here.
+
+**x01** sometimes contains a copy of the input, sometimes a seemingly random token. However, the top-10 predictions often include similarly-sounding or -written words, or variants. For example, the next prediction for " account" is `[' account', ' accounts', ' Account', 'account', 'nan', 'ban', 'rint', 'p']`. Some variant of "account" appears very often, and the other tokens make some sense for the token 'account' as well: 'p' and 'rint' make 'print', 'nan' is a common value that accountants have to deal with, and an account can be banned as in 'ban'. It looks like x01 consists of a bunch of tokens that are just different writings of the input token, plus a bunch of loose associations.
+
+So my **intermediate conclusion** is that the language head treats the input embeddings of current tokens as embeddings of the next token for each, and x01 makes up for that by providing information about and associations with the input embeddings. This has the nice side-effect that it minimizes the amount of change to x required over the length of the model, because leaving it un-changed makes it simply the 1-gram next-token predictions, which are already decent.
+
+The next observation is that **x** also makes next-token predictions (obviously). One model of what's happening inside the model is:
+
+- x00 provides a 1-gram next-token prediction distribution at every layer of the model
+- In early layers, this helps the model pick a direction for x, by biasing it
+- In the last few layers, this prediction is substracted from x, to reduce the 1-gram bias which is of course sub-optimal, leaving only the refined x
+- x01 gives an approximate view of the input, and the contrast between it and the next-token predictions by x00 gives the model additional information about how exactly it needs to refine the vector to make the best possible predictions
+
+As for the **value embeddings**, they are (1) very different, and (2) make no sense. The latter isn't surprising; after all, they are applied inside the attention mechanism, not to the residual directly, so they are two transformations away from where the language head is usually applied.
+
+However, when they are projected back into the residual stream with the output projections of the attention layers they are used in, the predictions suddenly make more sense again. It's also notable that the same value embedding clearly has different functions in each of the two layers it's used in, as projected back into the residual stream.
+
+Let's first look at ve0 at both layers 0 and 13:
+
+| vector   | t0           | t1        | t2    | t3      | t4     | t5           | t6   | t7     | t8   | t9      | t10      | t11   |
+|----------|--------------|-----------|-------|---------|--------|--------------|------|--------|------|---------|----------|-------|
+| input    | mail         | _account  | :     | _email  | @      | example      | .    | com    | \n   | -       | _Emails  | _will |
+| ve0_o0   | _sites       | _deposit  | _our  | _HR     | _helm  | _volunteers  | _are | ounces | _�   | _budget | Google   | _be   |
+| ve0_o13  | _newsletters | abilities | _hide | _sender | _Thank | _documentary | .    | mitted | \n   | -       | _Podesta | _be   |
+
+Some observations:
+
+- ve0_o0 seems to mostly play word association; not predictions, not exact copying of the inputs
+- ve0_o13 is similar, but a clearer mixture of somewhat sensible completions ("_account" + "abilities" = "_accountabilities"), associations ("mail" &rarr; "newsletters") and copying ("." &rarr; "."). There's also some apparent nonsense in there ("_Emails" &rarr; "_Podesta"), and "_will" is always followed by the prediction "_be"
+
+Unfortunately, I cannot see any super obvious patterns beyond those vague ones, so let's move on to ve1:
+
+| vector   | t0      | t1        | t2         | t3     | t4   | t5       | t6      | t7    | t8     | t9     | t10     | t11   |
+|----------|---------|-----------|------------|--------|------|----------|---------|-------|--------|--------|---------|-------|
+| input    | mail    | _account  | :          | _email | @    | example  | .       | com   | \n     | -      | _Emails | _will |
+| ve1_o1   | ].      | agy       | _Hendricks | _email | w    | _best    | entimes | _CNBC | opolis | avored | string  | _be   |
+| ve1_o14  | _sender | _credited | ;          | @      | _@   | _herself | .       | endas | "      | -      | _Alert  | _will |
+
+- For ve1_o1, the predictions are mostly nonsense. "_account" &rarr; "agy"? ":" &rarr; "_Hendricks"? "@" &rarr; "w"? The only predictions that make sense to me are copying "_email", the prediction "_will" &rarr; "_be", and *maybe* "com" &rarr; "_CNBC"
+- ve1_o14 on the other hand is clearly an association machine, which makes it a partial predictor. "mail" &rarr; "_sender", "_account" &rarr; "_credited", etc. All of these make sense.
+
+This leaves us with ve2:
+
+| vector   | t0     | t1       | t2   | t3     | t4   | t5       | t6     | t7     | t8   | t9   | t10     | t11   |
+|----------|--------|----------|------|--------|------|----------|--------|--------|------|------|---------|-------|
+| input    | mail   | _account | :    | _email | @    | example  | .      | com    | \n   | -    | _Emails | _will |
+| ve2_o2   | _email | _account | _Eye | _email | @    | _example | _quick | acting | _quo | -    | _Emails | _be   |
+| ve2_o15  | mail   | _account | :    | _email | @    | example  | lled   | com    | \n   | -    | _Emails | _will |
+
+- ve2_o2 is a mixture of association, copying, and prediction
+- ve2_o15 is a pure copying of the input information (with one screwup for "." &rarr; "lled")
+
+The last point is very important: it means that the model at its final layer has three embeddings available, which represent three things:
+
+- x00 represents the 1-gram next-token predictions
+- x01 represents associations with the input tokens, and tokens that are similar to the input tokens
+- ve2 represents the input tokens themselves
+
+In general, it seems to me like a lot of the point of these embeddings is to group tokens in different ways; partially to make up for the lack of byte-level information ("_account" &rarr; "_account" / "_accounts" / ...), partially to suggest semantic closeness ("_account" &rarr; "_deposit"), partially to give a view of the input data, and partially to suggest common completions.
+
+The different lambdas then allow the model to mix and match these embeddings, and the transformer layers allow it to dynamically apply corrections. That's speculation though, as I don't have any strong evidence for it besides the language head outputs for the different vectors (and I didn't look at all of them, only the subset that I've presented above).
+
+### So why does adding more embeddings work?
+
+Again, the simplest explanation is that embeddings are cheap additional parameters.
+
+However, if I simply added the two embeddings together with equal weight at each layer (or only at the input), they would have no more expressive power than a single embedding layer.
+
+The explanation for why it works is that the weights of the weighted sum is different for each layer, so each layer gets a different combination of the embeddings. [ClassicLarry](LINK) said it best in [this comment on my PR](LINK):
+
+> This accomplishes a very cool dynamic. Basically you have gotten rid of the concept of a token embedding vector. Instead of representing a token as a fixed point in d_model dimensional space, you have added a degree of freedom where a token embedding is represented by interpolating between two points defined by embed1 and embed2, and the interpolation point varies by layer.
+
+At least in the models I've trained, this leads to an interesting separation of concerns between the embeddings, as discussed above. The part that stuck out most to me was the fact that x00 was decoded into next-token predictions. This means that the embedding and lm-head together are already an okay next-token predictor. It also means that the transformer layers only have to apply minimal edits to x00 in order to make the predictions much stronger. Deep Neural Networks love gradual edits (they are one of the nice things about residual connections), so this is great!
+
+And again, it should have been obvious to me, because [the logit lens](https://www.lesswrong.com/posts/AcKRB8wDpdaN6v6ru/interpreting-gpt-the-logit-lens) explicitly showed this a long time ago. Still, it's neat to see that the model makes use of this property very strongly.
+
+## Bonus experiment: Adding x00 to the output latent
+
+I also tried adding x00 to the normed x at the output latent in a learned weighted sum. Normally, we only add these embeddings to the *inputs* of transformer layers, but here I've added one of them to the *output*  of the last layer. I had planned on doing similar ablations as [above](#adding-more-embeddings-ablation), but this setting destroyed the model performance so much that I just didn't bother; see below (losses averaged over 2 runs each):
+
+![emb-lm-skip](images/val_loss_step_emb-lm-skip.png)
+
+Clearly, adding x00 to x reduces performance over the steps. Since it also adds overhead from the addition, it's definitely worse than the baseline.
+
+My initial explanation for this is that the last MLP is essential for making sense of the actual combinatin of embeddings, and that is missing in this approach. In other words, don't touch the output with static embeddings.
+
+## On scaling
+
+Since I have no experience in scaling LLMs to large sizes (and I haven't done the experiments), this section is full on speculation.
+
+Anyway, I can imagine that this technique of adding more embedding layers will scale fairly well, for two reasons:
+
+- As the model gets wider, adding the extra embeddings costs less and less relative to the matrix products, because the cost of scalar addition scales linearly with the model dimension, while the cost of matrix multiplication rises quadratically. And since the embeddings themselves are just lookup tables, producing them will always be comparatively cheap
+- As the model gets deeper, I expect that the number of embedding layers that can be added productively to increase. That's because as the number of layers increases, the number of different combinations of these embeddings that can be used inside the model increases
+
+Effectively, this method of increasing the number of input embeddings and doing a learned weighted sum between them and the residual at every layer input *decouples the possible embedding size from the model dimension* (if we count the interpolation between multiple embeddings as one big embeddings, which I'm not completely sure about mathematically, but which makes sense).
+
+It's kind of the equivalent of [Mixture of Softmaxes](https://arxiv.org/abs/1809.09296), which performs multiple linear transformations of the output latents, applies the language head and softmax to all of them, and then sums the results up (where the weights of the sum add up to one to keep the final output a probability distribution).
+
+## Summary
+
+I have achieved a modded-nanogpt medium world record, and performed some basic interpretability work using the logit lens. I suspect that the method is fairly general and scales well.
+
+## Appendix
+
 <details>
-<summary>All next-token predictions</summary>
+<summary>Formatted next-token predictions from the logit lens</summary>
+
+The dictionary shows one sub-dictionary for each component (x, x00, etc.). Each of these subdictionaries maps from the token position to another sub-sub-dictionary, which in turn maps from the true input tokens at each position to the most likely next token as decoded from each component by the language head.
 
 ```python
 {
@@ -3794,182 +3970,3 @@ There are some symbols which my terminal didn't properly render, but I noticed t
 ```
 
 </details>
-
-> I replaced newlines with '\n' and space with '_'.
-
-If you don't want to expand these results, I have also put them into a table. This is what the different symbols mean:
-
-- t{i} is the token at position i
-- 'vector' refers to the vector that is being decoded (plus the 'input' which are simply the raw input tokens)
-- x-{j} refers to x before the weighted sum with x00 and x01 at layer j
-- x-out is the output latent that is commonly decoded by the language head
-- ve0, ve1, and ve2 are the value embeddings of the tokens decoded by the language head
-- ve{i}_o{j} is ve{i} projected into the residual space via the output projection of the attention weight at layer {j}, then decoded by the language head
-
-| vector   | t0           | t1        | t2         | t3       | t4          | t5           | t6      | t7            | t8     | t9      | t10              | t11   |
-|----------|--------------|-----------|------------|----------|-------------|--------------|---------|---------------|--------|---------|------------------|-------|
-| input    | mail         | _account  | :          | _email   | @           | example      | .       | com           | \n     | -       | _Emails          | _will |
-| x-0      | _address     | ants      | _http      | _address | #$          | _of          | \n      | /             | The    | based   | ensitive         | _be   |
-| x-1      | _sites       | _Plays    | _http      | _hub     | �           | _Usage       | \n      | <|endoftext|> | _�     | _The    | _to              | _not  |
-| x-2      | _addresses   | _websites | |          | _address | example     | )|           | |       | <|endoftext|> | |      | _Posted | _from            | _be   |
-| x-3      | _first       | _first    | |          | @        | example     | ever         | |       | \n            | |      | _1      | _from            | _be   |
-| x-4      | )?           | _resume   | The        | @        | _div        | _dot         | The     | )             | The    | PH      | _from            | _be   |
-| x-5      | Microsoft    | Microsoft | Microsoft  | @        | _subscriber | .;           | The     | /#            | The    | Date    | _from            | _be   |
-| x-6      | Microsoft    | >         | Date       | >        | _pc         | _dot         | I       | .             | The    | _Date   | _from            | _be   |
-| x-7      | |            | |         | Date       | @        | nt          | .            | com     | \n            | The    | _Date   | :                | _be   |
-| x-8      | :            | .         | email      | @        | rav         | .            | com     | .             | The    | _Posted | :                | _be   |
-| x-9      | Today        | _of       | Name       | @        | posted      | .            | com     | .             | The    | _Posted | _email           | _be   |
-| x-10     | .-           | .         | Software   | @        | example     | _dot         | |       | .             | The    | _Date   | _must            | _be   |
-| x-11     | ribune       | ,         | mail       | @        | example     | .            | |       | .             | |      | _Date   | :                | _be   |
-| x-12     | .            | .         | mail       | @        | name        | .            | |       | .             | |      | _A      | :                | _be   |
-| x-13     | .            | .         | \n         | @        | example     | .            | gov     | .             | The    | _What   | :                | _be   |
-| x-14     | .            | .         | \n         | @        | example     | .            | com     | \n            | The    | _What   | _are             | _be   |
-| x-15     | .            | _of       | \n         | @        | example     | .            | com     | \n            | The    | _Email  | _sent            | _be   |
-| x-out    | mail         | .         | \n         | @        | example     | .            | com     | \n            | -      | _The    | _to              | _be   |
-| x00      | _address     | ants      | _http      | _address | #$          | _of          | \n      | /             | The    | based   | ensitive         | _be   |
-| x01      | gery         | _account  | :          | sts      | @           | urses        | .       | weet          | \n     | -       | =-=-=-=-=-=-=-=- | _will |
-| ve0      | board        | s         | IRO        | Grid     | _pleasure   | Url          | aries   | _someday      | shire  | ences   | _need            | _Tube |
-| ve1      | CN           | peat      | _desks     | ˈ        | ua          | ony          | atton   | vy            | emia   | ˈ       | ş                | hips  |
-| ve2      | gers         | scene     | _herself   | assic    | 's          | ops          | ESS     | rians         | ball   | iary    | _quo             | ?"    |
-| ve0_o0   | _sites       | _deposit  | _our       | _HR      | _helm       | _volunteers  | _are    | ounces        | _�     | _budget | Google           | _be   |
-| ve1_o1   | ].           | agy       | _Hendricks | _email   | w           | _best        | entimes | _CNBC         | opolis | avored  | string           | _be   |
-| ve2_o2   | _email       | _account  | _Eye       | _email   | @           | _example     | _quick  | acting        | _quo   | -       | _Emails          | _be   |
-| ve0_o13  | _newsletters | abilities | _hide      | _sender  | _Thank      | _documentary | .       | mitted        | \n     | -       | _Podesta         | _be   |
-| ve1_o14  | _sender      | _credited | ;          | @        | _@          | _herself     | .       | endas         | "      | -       | _Alert           | _will |
-| ve2_o15  | mail         | _account  | :          | _email   | @           | example      | lled    | com           | \n     | -       | _Emails          | _will |
-
-The first interesting result I'm seeing is for x00: while it's just the input embeddings, the language head interprets them as next-token predictions! "mail" &rarr; "address", "account" &rarr; "atns", etc. are all clear 1-gram next-token predictions.
-
-x01 sometimes contains a copy of the input, sometimes a seemingly random token. However, the top-10 predictions often include similarly-sounding or -written words, or variants. For example, the next prediction for " account" is `[' account', ' accounts', ' Account', 'account', 'nan', 'ban', 'rint', 'p']`. Some variant of "account" appears very often, and the other tokens make some sense for the token 'account' as well: 'p' and 'rint' make 'print', 'nan' is a common value that accountants have to deal with, and an account can be banned as in 'ban'. It looks like x01 consists of a bunch of tokens that are just different writings of the input token, plus a bunch of loose associations.
-
-So my first intermediate conclusion is that the language head treats the input embeddings of current tokens as embeddings of the next token for each, and x01 makes up for that by providing information about and associations with the input embeddings. I believe that this switch is caused by the value embeddings: the same value embeddings are applied to layers 0 and 13, and 1 and 14, and 2 and 15. So the same embeddings must perform some task early and late in the model, which means that it's likely valuable for the model to interpret them differently at different points of the model. This has the nice side-effect that it minimizes the amount of change to x required over the length of the model, because leaving it un-changed makes it simply the 1-gram next-token predictions, which are already decent.
-
-The next observation is that x also makes next-token predictions. One model of what's happening inside the model is:
-
-- x00 provides a 1-gram next-token prediction distribution at every layer of the model
-- In early layers, this helps the model pick a direction for x, by biasing it
-- In the last few layers, this prediction is substracted from x, to reduce the 1-gram bias which is of course sub-optimal, leaving only the refined x
-- x01 gives an approximate view of the input, and the contrast between it and the next-token predictions by x00 gives the model additional information about how exactly it needs to refine the vector to make the best possible predictions
-
-As for the value embeddings, they are (1) very different, and (2) make no sense. The latter isn't surprising; after all, they are applied inside the attention mechanism, not to the residual directly, so they are two transformations away from where the language head is usually applied.
-
-However, when they are projected back into the residual stream with the output projections of the attention layers they are used in, the predictions suddenly make more sense again. It's also notable that the same value embedding clearly has different functions in each of the two layers it's used in, as projected back into the residual stream.
-
-Let's first look at ve0 at both layers 0 and 13:
-
-| vector   | t0           | t1        | t2    | t3      | t4     | t5           | t6   | t7     | t8   | t9      | t10      | t11   |
-|----------|--------------|-----------|-------|---------|--------|--------------|------|--------|------|---------|----------|-------|
-| input    | mail         | _account  | :     | _email  | @      | example      | .    | com    | \n   | -       | _Emails  | _will |
-| ve0_o0   | _sites       | _deposit  | _our  | _HR     | _helm  | _volunteers  | _are | ounces | _�   | _budget | Google   | _be   |
-| ve0_o13  | _newsletters | abilities | _hide | _sender | _Thank | _documentary | .    | mitted | \n   | -       | _Podesta | _be   |
-
-Some observations:
-
-- ve0_o0 seems to mostly play word association; not predictions, not exact copying of the inputs
-- ve0_o13 is similar, but a clearer mixture of somewhat sensible completions ("_account" + "abilities" = "_accountabilities"), associations ("mail" &rarr; "newsletters") and copying ("." &rarr; "."). There's also some apparent nonsense in there ("_Emails" &rarr; "_Podesta"), and "_will" is always followed by the prediction "_be"
-
-Unfortunately, I cannot see any super obvious patterns beyond those vague ones, so let's move on to ve1:
-
-| vector   | t0      | t1        | t2         | t3     | t4   | t5       | t6      | t7    | t8     | t9     | t10     | t11   |
-|----------|---------|-----------|------------|--------|------|----------|---------|-------|--------|--------|---------|-------|
-| input    | mail    | _account  | :          | _email | @    | example  | .       | com   | \n     | -      | _Emails | _will |
-| ve1_o1   | ].      | agy       | _Hendricks | _email | w    | _best    | entimes | _CNBC | opolis | avored | string  | _be   |
-| ve1_o14  | _sender | _credited | ;          | @      | _@   | _herself | .       | endas | "      | -      | _Alert  | _will |
-
-- For ve1_o1, the predictions are mostly nonsense. "_account" &rarr; "agy"? ":" &rarr; "_Hendricks"? "@" &rarr; "w"? The only predictions that make sense to me are copying "_email", "_will" &rarr; "_be", and *maybe* "com" &rarr; "_CNBC"
-- ve1_o14 on the other hand is clearly an association machine, which makes it a partial predictor. "mail" &rarr; "_sender", "_account" &rarr; "_credited", etc. All of these make sense.
-
-This leaves us with ve2:
-
-| vector   | t0     | t1       | t2   | t3     | t4   | t5       | t6     | t7     | t8   | t9   | t10     | t11   |
-|----------|--------|----------|------|--------|------|----------|--------|--------|------|------|---------|-------|
-| input    | mail   | _account | :    | _email | @    | example  | .      | com    | \n   | -    | _Emails | _will |
-| ve2_o2   | _email | _account | _Eye | _email | @    | _example | _quick | acting | _quo | -    | _Emails | _be   |
-| ve2_o15  | mail   | _account | :    | _email | @    | example  | lled   | com    | \n   | -    | _Emails | _will |
-
-- ve2_o2 is a mixture of association, copying, and prediction
-- ve2_o15 is a pure copying of the input information (with one screwup for "." &rarr; "lled")
-
-The last point is very important: it means that the model at its final layer has three embeddings available, which represent three things:
-
-- x00 represents the 1-gram next-token predictions
-- x01 represents associations with the input tokens, and tokens that are similar to the input tokens
-- ve2 represents the input tokens themselves
-
-In general, it seems to me like a lot of the point of these embeddings is to group tokens in different ways; partially to make up for the lack of byte-level information ("_account" &rarr; "_account" / "_accounts" / ...), partially to suggest semantic closeness ("_account" &rarr; "_deposit"), partially to give a view of the input data, and partially to suggest common completions.
-
-The different lambdas then allow the model to mix and match these embeddings, and the transformer layers allow it to dynamically apply corrections. That's speculation though, as I don't have any strong evidence for it besides the language head outputs for the different vectors (and I didn't look at all of them, only the subset that I've presented above).
-
-### Learned lambdas with multiple added embeddings
-
-Let's look at the lambdas over the layers at the end of training, for different numbers of added embeddings at the input (all with three total value embeddings still). I forgot to save the activation norms unfortunately, so the scale of x isn't accurate (it's effectively rising over the layers). All the embeddings have the same norm though (because they were actively normed), so their relative lambdas are very meaningful.
-
-Here are the lambdas for two additional embeddings:
-
-![lambdas: x00, x01, x02](images/1-layer.png)
-
-This is unfortunately pretty noisy. I can see two trends though that we've seen before and will see again:
-
-1. x starts high, then falls sharply and stays constant. Again, this is just the lambda, ignoring the norm of the activations, so x is actually rising over the layers; but it is the trend for the lambdas
-2. x00 falls off sharply at the end
-3. The other lambdas differ clearly in some layers. In this case, x01 and x02 track closely in the first 10 layers, but then diverge quickly
-
-Now, here are the lambdas for three additional embeddings:
-
-![lambdas: x00, x01, x02, x03](images/2-layer.png)
-
-The same trends as before apply. Especially interesting is the fact that the relative weights of the lambdas for x01, x02, and x03 seem to shift in five distinct phases, with the shifts occuring after a fairly consistent number of layers each:
-
-1. In the first layer (layer 0), they are all fairly high (though x and x00 have much higher lambdas, so they are low in relative terms)
-2. Then, they are close to zero for four layers while x00 slowly falls, up to and including layer 4
-3. Starting at layer 5, x01 and x02 become negative, while x03 stays close to zero and x00 continues to fall for four more layers
-4. Starting at layer 9, the values of x01 and x02 slowly go positive, while the value of x03 slowly goes negative and x00 stays constant for four more layers
-5. Starting at layer 13 (and a little bit at layer 12), the values of x00 and x01 fall off sharply, while those of x02 and x03 rise sharply for the last three layers
-
-I do not know what exactly is going on, and it would likely involve a lot of work to find out, but I find the pattern fascinating nevertheless.
-
-Now here are the lambdas with four additional embeddings:
-
-![lambdas: x00, x01, x02, x03, x04](images/3-layer.png)
-
-Similarly to the previous plot, the lambdas seem to change modes every few layers. However, it is chaotic enough that I'm not confident in naming specific mode boundaries; it's more of a visual feeling to me than something concrete.
-
-### So why does adding more embeddings work?
-
-Again, the simplest explanation is that embeddings are cheap additional parameters.
-
-However, if I simply added the two embeddings together with equal weight at each layer (or only at the input), they would both receive an identical gradient, because the `backward` of addition is `copy`. Here are the reasons it still works:
-
-1. The embeddings are randomly initialized, so the gradients can still lead to different final embeddings
-2. The sum isn't constant; it's a *learned weighted sum at every layer*, which means that the relative weights of the embeddings can differ between the layers; thus, they *can* receive different gradients and thus fully make use of the additional model capacity
-
-At least in the models I've trained, this leads to an interesting separation of concerns between the embeddings, as discussed above. The part that stuck out most to me was the fact that x00 was decoded into next-token predictions. This means that the embedding and lm-head together are already an okay next-token predictor. It also means that the transformer layers only have to apply minimal edits to x00 in order to make the predictions much stronger. Deep Neural Networks love gradual edits (they are one of the nice things about residual connections), so this is great!
-
-And it should have been obvious to me, because [the logit lens](https://www.lesswrong.com/posts/AcKRB8wDpdaN6v6ru/interpreting-gpt-the-logit-lens) explicitly showed this a long time ago. Still, it's neat to see that the model makes use of this property very strongly.
-
-#### Bonus experiment: Adding x00 to the output latent
-
-I also tried adding x00 to the normed x at the output latent in a learned weighted sum. Normally, we only add these embeddings to the *inputs* of transformer layers, but here I've added one of them to the *output*  of the last layer. I had planned on doing similar ablations as [above](#validation-losses-when-varying-the-number-of-extra-embeddings), but this setting destroyed the model performance so much that I just didn't bother; see below(losses averaged over 2 runs each):
-
-![emb-lm-skip](images/val_loss_step_emb-lm-skip.png)
-
-Clearly, adding x00 to x reduces performance over the steps. Since it also adds overhead from the addition, it's definitely worse than the baseline.
-
-My initial explanation for this is that the last MLP is essential for making sense of the actual combinatin of embeddings, and that is missing in this approach. In other words, don't touch the output with static embeddings.
-
-## On scaling
-
-Since I have no experience in scaling LLMs to large sizes (and I haven't done the experiments), this section is full on speculation.
-
-Anyway, I can imagine that this technique of adding more embedding layers will scale fairly well, for two reasons:
-
-- As the model gets wider, adding the extra embeddings costs less and less relative to the matrix products, because the cost of scalar addition scales linearly with the model dimension, while the cost of matrix multiplication rises quadratically. And since the embeddings themselves are just lookup tables, producing them will always be comparatively cheap
-- As the model gets deeper, I expect that the number of embedding layers that can be added productively to increase. That's because as the number of layers increases, the number of different combinations of these embeddings that can be used inside the model increases
-
-Effectively, this method of increasing the number of input embeddings and doing a learned weighted sum between them and the residual at every layer input *decouples the possible embedding size from the model dimension* (if we count the interpolation between multiple embeddings as one big embeddings, which I'm not completely sure about mathematically, but which makes sense).
-
-It's kind of the equivalent of [Mixture of Softmaxes](https://arxiv.org/abs/1809.09296), which performs multiple linear transformations of the output latents, applies the language head and softmax to all of them, and then sums the results up (where the weights of the sum add up to one to keep the final output a probability distribution).
-
-## Summary
-
-I have achieved a modded-nanogpt medium world record, and performed some basic interpretability work using the logit lens. I suspect that the method is fairly general and scales well.
