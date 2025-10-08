@@ -23,6 +23,21 @@ I believe that this effectively allows for a decoupling between embedding and mo
 
 ## The status quo - modded-nanogpt medium before the record
 
+The modded-nanogpt architecture is convoluted and peculiar. It's also awesome, but still, I will leave out most of the complexity for this article.
+
+The one aspect of it that matters here is that the input embedding x0 is added to the residual stream in a weighted sum at every layer. The weights of that weighted sum are learned, and they are different from layer to layer. In code it looks somewhat like this:
+
+```python
+x = x0 = norm(self.embed(input_sequence))  # RMS-normed input embeddings
+
+for layer in self.layers:
+    # The lambdas are learned scalar values
+    x = lambdas[i][0] * x + lambdas[i][1] * x0
+    x = layer(x)  # includes residual
+```
+
+I've talked about this before in my [article about modded-nanogpt lambdas](https://snimu.github.io/2025/08/11/modded-nanogpt-lambdas.html); in short, adding x0 at evey layer shortens the gradient path to the input embeddings significantly. It also provides way more gradient information to them, because in the backward pass, each layer acts as data augmentation for the gradient of the previous layer. Additionally, adding x0 to every layer input reduces the job of the LLM to simple embedding math, as explained in the article.
+
 ## The record
 
 For my record attempts, I used as a baseline [my previous record](https://snimu.github.io/2025/10/07/modded-nanogpt-value-embeddings.html). It increased the number of value embeddings from three to five, which allowed me to reduce the number of training steps. However, all experiments discussed in this article but the actual record attempt were run concurrently with the experiments that led to my previous record, so they will only use three value embeddings and more training steps.
@@ -31,15 +46,15 @@ The ablations in this article concern adding more embeddings, and adding them in
 
 ```python
 # Create the embeddings
-x = x00 = norm(embed1(input_sequence))
-x01 = norm(embed2(input_sequence))
+x = x00 = norm(self.embed1(input_sequence))
+x01 = norm(self.embed2(input_sequence))
 ...  # up to x04
 
 # Sum the embeddings at every layer and apply the layer
 # Ignores skip connections, etc.
-for layer in self.layers:
-    # l0, l1, etc. are learned scalar values that I'll call lambdas
-    x = l0 * x + l1 * x00 + l2 * x01 + ...  # up to x04
+for i, layer in enumerate(self.layers):
+    # The lambdas are learned scalar values
+    x = lambdas[i][0] * x + lambdas[i][1] * x00 + lambdas[i][2] * x01 + ...  # up to x04
     x = layer(x)  # includes residual
 ```
 
