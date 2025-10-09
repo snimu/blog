@@ -1,6 +1,6 @@
 # modded-nanogpt world record: Decoupling embedding size from model dimension
 
-I have achieved an (not yet official) [modded-nanogpt](https://github.com/KellerJordan/modded-nanogpt) medium track [world record](https://github.com/KellerJordan/modded-nanogpt/pull/124).
+I have achieved a (not yet official) [modded-nanogpt](https://github.com/KellerJordan/modded-nanogpt) medium track [world record](https://github.com/KellerJordan/modded-nanogpt/pull/124).
 
 The technique is simple: embed the token sequence using multiple independent embedding layers. Then, perform a weighted sum over these embeddings and the residual stream at the input to every transformer layer. The weights are learned, and differ from layer to layer.
 
@@ -199,44 +199,44 @@ There are some symbols which my terminal didn't properly render, but I noticed t
 
 This is what the different symbols mean:
 
-- t{i} is the token at position i
-- 'vector' refers to the vector that is being decoded (plus the 'input' which are simply the raw input tokens)
-- x-{j} refers to x before the weighted sum with x00 and x01 at layer j
-- x-out is the output latent that is commonly decoded by the language head
-- ve0, ve1, and ve2 are the value embeddings of the tokens decoded by the language head
-- ve{i}_o{j} is ve{i} projected into the residual space via the output projection of the attention weight at layer {j}, then decoded by the language head
+- `t{i}` is the token at position i
+- `vector` refers to the vector that is being decoded (plus the 'input' which are simply the raw input tokens)
+- `x-{j}` refers to x before the weighted sum with x00 and x01 at layer j
+- `x-out` is the output latent that is commonly decoded by the language head
+- `ve0`, `ve1`, and `ve2` are the value embeddings of the tokens decoded by the language head
+- `ve{i}_o{j}` is `ve{i}` projected into the residual space via the output projection of the attention weight at layer `{j}`, then decoded by the language head
 
 | vector   | t0           | t1        | t2         | t3       | t4          | t5           | t6      | t7            | t8     | t9      | t10              | t11   |
 |----------|--------------|-----------|------------|----------|-------------|--------------|---------|---------------|--------|---------|------------------|-------|
-| input    | mail         | _account  | :          | _email   | @           | example      | .       | com           | \n     | -       | _Emails          | _will |
-| x-0      | _address     | ants      | _http      | _address | #$          | _of          | \n      | /             | The    | based   | ensitive         | _be   |
-| x-1      | _sites       | _Plays    | _http      | _hub     | �           | _Usage       | \n      | <|endoftext|> | _�     | _The    | _to              | _not  |
-| x-2      | _addresses   | _websites | |          | _address | example     | )|           | |       | <|endoftext|> | |      | _Posted | _from            | _be   |
-| x-3      | _first       | _first    | |          | @        | example     | ever         | |       | \n            | |      | _1      | _from            | _be   |
-| x-4      | )?           | _resume   | The        | @        | _div        | _dot         | The     | )             | The    | PH      | _from            | _be   |
-| x-5      | Microsoft    | Microsoft | Microsoft  | @        | _subscriber | .;           | The     | /#            | The    | Date    | _from            | _be   |
-| x-6      | Microsoft    | >         | Date       | >        | _pc         | _dot         | I       | .             | The    | _Date   | _from            | _be   |
-| x-7      | |            | |         | Date       | @        | nt          | .            | com     | \n            | The    | _Date   | :                | _be   |
-| x-8      | :            | .         | email      | @        | rav         | .            | com     | .             | The    | _Posted | :                | _be   |
-| x-9      | Today        | _of       | Name       | @        | posted      | .            | com     | .             | The    | _Posted | _email           | _be   |
-| x-10     | .-           | .         | Software   | @        | example     | _dot         | |       | .             | The    | _Date   | _must            | _be   |
-| x-11     | ribune       | ,         | mail       | @        | example     | .            | |       | .             | |      | _Date   | :                | _be   |
-| x-12     | .            | .         | mail       | @        | name        | .            | |       | .             | |      | _A      | :                | _be   |
-| x-13     | .            | .         | \n         | @        | example     | .            | gov     | .             | The    | _What   | :                | _be   |
-| x-14     | .            | .         | \n         | @        | example     | .            | com     | \n            | The    | _What   | _are             | _be   |
-| x-15     | .            | _of       | \n         | @        | example     | .            | com     | \n            | The    | _Email  | _sent            | _be   |
-| x-out    | mail         | .         | \n         | @        | example     | .            | com     | \n            | -      | _The    | _to              | _be   |
-| x00      | _address     | ants      | _http      | _address | #$          | _of          | \n      | /             | The    | based   | ensitive         | _be   |
-| x01      | gery         | _account  | :          | sts      | @           | urses        | .       | weet          | \n     | -       | =-=-=-=-=-=-=-=- | _will |
-| ve0      | board        | s         | IRO        | Grid     | _pleasure   | Url          | aries   | _someday      | shire  | ences   | _need            | _Tube |
-| ve1      | CN           | peat      | _desks     | ˈ        | ua          | ony          | atton   | vy            | emia   | ˈ       | ş                | hips  |
-| ve2      | gers         | scene     | _herself   | assic    | 's          | ops          | ESS     | rians         | ball   | iary    | _quo             | ?"    |
-| ve0_o0   | _sites       | _deposit  | _our       | _HR      | _helm       | _volunteers  | _are    | ounces        | _�     | _budget | Google           | _be   |
-| ve1_o1   | ].           | agy       | _Hendricks | _email   | w           | _best        | entimes | _CNBC         | opolis | avored  | string           | _be   |
-| ve2_o2   | _email       | _account  | _Eye       | _email   | @           | _example     | _quick  | acting        | _quo   | -       | _Emails          | _be   |
-| ve0_o13  | _newsletters | abilities | _hide      | _sender  | _Thank      | _documentary | .       | mitted        | \n     | -       | _Podesta         | _be   |
-| ve1_o14  | _sender      | _credited | ;          | @        | _@          | _herself     | .       | endas         | "      | -       | _Alert           | _will |
-| ve2_o15  | mail         | _account  | :          | _email   | @           | example      | lled    | com           | \n     | -       | _Emails          | _will |
+| **input**    | mail         | _account  | :          | _email   | @           | example      | .       | com           | \n     | -       | _Emails          | _will |
+| **x-0**      | _address     | ants      | _http      | _address | #$          | _of          | \n      | /             | The    | based   | ensitive         | _be   |
+| **x-1**      | _sites       | _Plays    | _http      | _hub     | �           | _Usage       | \n      | <|endoftext|> | _�     | _The    | _to              | _not  |
+| **x-2**      | _addresses   | _websites | |          | _address | example     | )|           | |       | <|endoftext|> | |      | _Posted | _from            | _be   |
+| **x-3**      | _first       | _first    | |          | @        | example     | ever         | |       | \n            | |      | _1      | _from            | _be   |
+| **x-4**      | )?           | _resume   | The        | @        | _div        | _dot         | The     | )             | The    | PH      | _from            | _be   |
+| **x-5**      | Microsoft    | Microsoft | Microsoft  | @        | _subscriber | .;           | The     | /#            | The    | Date    | _from            | _be   |
+| **x-6**      | Microsoft    | >         | Date       | >        | _pc         | _dot         | I       | .             | The    | _Date   | _from            | _be   |
+| **x-7**      | |            | |         | Date       | @        | nt          | .            | com     | \n            | The    | _Date   | :                | _be   |
+| **x-8**      | :            | .         | email      | @        | rav         | .            | com     | .             | The    | _Posted | :                | _be   |
+| **x-9**      | Today        | _of       | Name       | @        | posted      | .            | com     | .             | The    | _Posted | _email           | _be   |
+| **x-10**     | .-           | .         | Software   | @        | example     | _dot         | |       | .             | The    | _Date   | _must            | _be   |
+| **x-11**     | ribune       | ,         | mail       | @        | example     | .            | |       | .             | |      | _Date   | :                | _be   |
+| **x-12**     | .            | .         | mail       | @        | name        | .            | |       | .             | |      | _A      | :                | _be   |
+| **x-13**     | .            | .         | \n         | @        | example     | .            | gov     | .             | The    | _What   | :                | _be   |
+| **x-14**     | .            | .         | \n         | @        | example     | .            | com     | \n            | The    | _What   | _are             | _be   |
+| **x-15**     | .            | _of       | \n         | @        | example     | .            | com     | \n            | The    | _Email  | _sent            | _be   |
+| **x-out**    | mail         | .         | \n         | @        | example     | .            | com     | \n            | -      | _The    | _to              | _be   |
+| **x00**      | _address     | ants      | _http      | _address | #$          | _of          | \n      | /             | The    | based   | ensitive         | _be   |
+| **x01**      | gery         | _account  | :          | sts      | @           | urses        | .       | weet          | \n     | -       | =-=-=-=-=-=-=-=- | _will |
+| **ve0**      | board        | s         | IRO        | Grid     | _pleasure   | Url          | aries   | _someday      | shire  | ences   | _need            | _Tube |
+| **ve1**      | CN           | peat      | _desks     | ˈ        | ua          | ony          | atton   | vy            | emia   | ˈ       | ş                | hips  |
+| **ve2**      | gers         | scene     | _herself   | assic    | 's          | ops          | ESS     | rians         | ball   | iary    | _quo             | ?"    |
+| **ve0_o0**   | _sites       | _deposit  | _our       | _HR      | _helm       | _volunteers  | _are    | ounces        | _�     | _budget | Google           | _be   |
+| **ve1_o1**   | ].           | agy       | _Hendricks | _email   | w           | _best        | entimes | _CNBC         | opolis | avored  | string           | _be   |
+| **ve2_o2**   | _email       | _account  | _Eye       | _email   | @           | _example     | _quick  | acting        | _quo   | -       | _Emails          | _be   |
+| **ve0_o13**  | _newsletters | abilities | _hide      | _sender  | _Thank      | _documentary | .       | mitted        | \n     | -       | _Podesta         | _be   |
+| **ve1_o14**  | _sender      | _credited | ;          | @        | _@          | _herself     | .       | endas         | "      | -       | _Alert           | _will |
+| **ve2_o15**  | mail         | _account  | :          | _email   | @           | example      | lled    | com           | \n     | -       | _Emails          | _will |
 
 **x00**, the input embeddings, are interpreted by the language head as next-token-predictions: "mail" &rarr; "address", "account" &rarr; "atns", etc. are all clear 1-gram next-token predictions. This has been noted by the original logit lens article already, so it's nice to see it confirmed here.
 
@@ -259,9 +259,9 @@ Let's first look at ve0 at both layers 0 and 13:
 
 | vector   | t0           | t1        | t2    | t3      | t4     | t5           | t6   | t7     | t8   | t9      | t10      | t11   |
 |----------|--------------|-----------|-------|---------|--------|--------------|------|--------|------|---------|----------|-------|
-| input    | mail         | _account  | :     | _email  | @      | example      | .    | com    | \n   | -       | _Emails  | _will |
-| ve0_o0   | _sites       | _deposit  | _our  | _HR     | _helm  | _volunteers  | _are | ounces | _�   | _budget | Google   | _be   |
-| ve0_o13  | _newsletters | abilities | _hide | _sender | _Thank | _documentary | .    | mitted | \n   | -       | _Podesta | _be   |
+| **input**    | mail         | _account  | :     | _email  | @      | example      | .    | com    | \n   | -       | _Emails  | _will |
+| **ve0_o0**   | _sites       | _deposit  | _our  | _HR     | _helm  | _volunteers  | _are | ounces | _�   | _budget | Google   | _be   |
+| **ve0_o13**  | _newsletters | abilities | _hide | _sender | _Thank | _documentary | .    | mitted | \n   | -       | _Podesta | _be   |
 
 Some observations:
 
@@ -272,9 +272,9 @@ Unfortunately, I cannot see any super obvious patterns beyond those vague ones, 
 
 | vector   | t0      | t1        | t2         | t3     | t4   | t5       | t6      | t7    | t8     | t9     | t10     | t11   |
 |----------|---------|-----------|------------|--------|------|----------|---------|-------|--------|--------|---------|-------|
-| input    | mail    | _account  | :          | _email | @    | example  | .       | com   | \n     | -      | _Emails | _will |
-| ve1_o1   | ].      | agy       | _Hendricks | _email | w    | _best    | entimes | _CNBC | opolis | avored | string  | _be   |
-| ve1_o14  | _sender | _credited | ;          | @      | _@   | _herself | .       | endas | "      | -      | _Alert  | _will |
+| **input**    | mail    | _account  | :          | _email | @    | example  | .       | com   | \n     | -      | _Emails | _will |
+| **ve1_o1**   | ].      | agy       | _Hendricks | _email | w    | _best    | entimes | _CNBC | opolis | avored | string  | _be   |
+| **ve1_o14**  | _sender | _credited | ;          | @      | _@   | _herself | .       | endas | "      | -      | _Alert  | _will |
 
 - For ve1_o1, the predictions are mostly nonsense. "_account" &rarr; "agy"? ":" &rarr; "_Hendricks"? "@" &rarr; "w"? The only predictions that make sense to me are copying "_email", the prediction "_will" &rarr; "_be", and *maybe* "com" &rarr; "_CNBC"
 - ve1_o14 on the other hand is clearly an association machine, which makes it a partial predictor. "mail" &rarr; "_sender", "_account" &rarr; "_credited", etc. All of these make sense.
@@ -283,9 +283,9 @@ This leaves us with ve2:
 
 | vector   | t0     | t1       | t2   | t3     | t4   | t5       | t6     | t7     | t8   | t9   | t10     | t11   |
 |----------|--------|----------|------|--------|------|----------|--------|--------|------|------|---------|-------|
-| input    | mail   | _account | :    | _email | @    | example  | .      | com    | \n   | -    | _Emails | _will |
-| ve2_o2   | _email | _account | _Eye | _email | @    | _example | _quick | acting | _quo | -    | _Emails | _be   |
-| ve2_o15  | mail   | _account | :    | _email | @    | example  | lled   | com    | \n   | -    | _Emails | _will |
+| **input**    | mail   | _account | :    | _email | @    | example  | .      | com    | \n   | -    | _Emails | _will |
+| **ve2_o2**   | _email | _account | _Eye | _email | @    | _example | _quick | acting | _quo | -    | _Emails | _be   |
+| **ve2_o15**  | mail   | _account | :    | _email | @    | example  | lled   | com    | \n   | -    | _Emails | _will |
 
 - ve2_o2 is a mixture of association, copying, and prediction
 - ve2_o15 is a pure copying of the input information (with one screwup for "." &rarr; "lled")
@@ -308,21 +308,11 @@ However, if I simply added the two embeddings together with equal weight at each
 
 The explanation for why it works is that the weights of the weighted sum is different for each layer, so each layer gets a different combination of the embeddings. [Larry Dial](https://github.com/ClassicLarry) said it best in [this comment on my PR](https://github.com/KellerJordan/modded-nanogpt/pull/124#issuecomment-3282878227):
 
-> This accomplishes a very cool dynamic. Basically you have gotten rid of the concept of a token embedding vector. Instead of representing a token as a fixed point in d_model dimensional space, you have added a degree of freedom where a token embedding is represented by interpolating between two points defined by embed1 and embed2, and the interpolation point varies by layer.
+> Basically you have gotten rid of the concept of a token embedding vector. Instead of representing a token as a fixed point in d_model dimensional space, you have added a degree of freedom where a token embedding is represented by interpolating between two points defined by embed1 and embed2, and the interpolation point varies by layer.
 
 At least in the models I've trained, this leads to an interesting separation of concerns between the embeddings, as discussed above. The part that stuck out most to me was the fact that x00 was decoded into next-token predictions. This means that the embedding and lm-head together are already an okay next-token predictor. It also means that the transformer layers only have to apply minimal edits to x00 in order to make the predictions much stronger. Deep Neural Networks love gradual edits (they are one of the nice things about residual connections), so this is great!
 
 And again, it should have been obvious to me, because [the logit lens](https://www.lesswrong.com/posts/AcKRB8wDpdaN6v6ru/interpreting-gpt-the-logit-lens) explicitly showed this a long time ago. Still, it's neat to see that the model makes use of this property very strongly.
-
-## Bonus experiment: Adding x00 to the output latent
-
-I also tried adding x00 to the normed x at the output latent in a learned weighted sum. Normally, we only add these embeddings to the *inputs* of transformer layers, but here I've added one of them to the *output*  of the last layer. I had planned on doing similar ablations as [above](#adding-more-embeddings-ablation), but this setting destroyed the model performance so much that I just didn't bother; see below (losses averaged over 2 runs each):
-
-![emb-lm-skip](images/val_loss_step_emb-lm-skip.png)
-
-Clearly, adding x00 to x reduces performance over the steps. Since it also adds overhead from the addition, it's definitely worse than the baseline.
-
-My initial explanation for this is that the last MLP is essential for making sense of the actual combinatin of embeddings, and that is missing in this approach. In other words, don't touch the output with static embeddings.
 
 ## On scaling
 
@@ -335,7 +325,17 @@ Anyway, I can imagine that this technique of adding more embedding layers will s
 
 Effectively, this method of increasing the number of input embeddings and doing a learned weighted sum between them and the residual at every layer input *decouples the possible embedding size from the model dimension*.
 
-What might destroy the method is parallelizability, which I know too little about to be able to make any sort of judgement.
+There are things like parallelizability which I don't know too much about which might make the method infeasible, or simply diminishing returns with scale; but it looks at least worth a try to me.
+
+## Bonus experiment: Adding x00 to the output latent
+
+I also tried adding x00 to the normed x at the output latent in a learned weighted sum. Normally, we only add these embeddings to the *inputs* of transformer layers, but here I've added one of them to the *output*  of the last layer. I had planned on doing similar ablations as [above](#adding-more-embeddings-ablation), but this setting destroyed the model performance so much that I just didn't bother; see below (losses averaged over 2 runs each):
+
+![emb-lm-skip](images/val_loss_step_emb-lm-skip.png)
+
+Clearly, adding x00 to x reduces performance over the steps. Since it also adds overhead from the addition, it's definitely worse than the baseline.
+
+My initial explanation for this is that the last MLP is essential for making sense of the actual combinatin of embeddings, and that is missing in this approach. In other words, don't touch the output with static embeddings.
 
 ## Summary
 
