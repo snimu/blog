@@ -8,20 +8,33 @@ This article will describe that record, as well as multiple other experiments.
 
 ## The record
 
-The baseline comes from PR#137. I re-ran the code for 5 runs and got the following results:
+I will present the record in three steps: (1) reproducing the baseline results, (2) explaining the architectural change made to produce the record results, and (3) showing the record results.
+
+### Baseline
+
+The baseline comes from [PR#137](https://github.com/KellerJordan/modded-nanogpt/pull/137). I re-ran the code for 5 runs and got the following results:
 
 - Mean final validation loss: 2.9191
-- Mean time: 1393.16 ~= 23.22 minutes
+- Mean time: 1393.16 seconds ~= 23.22 minutes
 - T-test p-value: 0.01194797508928048
 
-I simply added the output of layer 11 (the 12'th layer) to the output of the final layer (layer 15, or the 16'th layer), in a weighted sum. The weights are scalars and are learned. This just means that right before applying the language head, I do this:
+So after only 5 runs, we can be ~98.8% sure that the mean loss over an infinite number of runs would be below 2.92, our target loss.
+
+### Record - Technique
+
+I simply added the output of layer 11 (the 12'th layer) to the output of the final layer (layer 15, or the 16'th layer), in a weighted sum. This just means that right before applying the language head, I do this:
 
 ```python
 skip_lambdas = self.scalars[-2:]
 x = norm(x) * skip_lambdas[0] + norm(skip_connections[11]) * skip_lambdas[1]
 ```
 
-Where the `skip_connections` contain the output latents of each layer, at the corresponding position.
+Some details:
+
+- `skip_connections` contain the output latents of each layer, at the corresponding position
+- The `skip_lambdas` are learned scalar values; they are initialized to 1.0 for x and to 0.0 for the skip connection, and then actively optimized over the course of training
+
+### Record - Results
 
 Doing this allowed me to reduce the step count from 5590 to 5550, which lead to the following results.
 
@@ -56,16 +69,25 @@ We don't just perform a sum between the outputs of layers 11 and 15, but a weigh
 
 TODO: add average over many runs; add plots of lambdas over the course of training
 
-Let's first look at a single run and its final lambdas. It ran for 5550 steps; the final loss is 2.919; and the total time 1384 seconds (23 minutes). Here are the lambdas:
+Here are the mean final lambdas over the course of 22 runs, rounded to 3 digits:
 
-- Layer 15 (x-lambda): 0.828
-- Layer 11 (skip-lambda): -0.292
+- Layer 15 (x-lambda): 0.802
+- Layer 11 (skip-lambda): -0.279
 
 This all but confirms a hypothesis by [Larry Dial](https://github.com/ClassicLarry) which he shared in a [comment](https://github.com/KellerJordan/modded-nanogpt/pull/138#issuecomment-3362739273) in the first PR I made about this record (which I closed to re-open a new one, because the first one was sloppy). His hypothesis is this (in my own words):
 
-Every layer that is not the output layer has the job of providing context to the next layer so that it can do its job better. But each layer output is also present in the final output latents, due to the residual stream. Thus, it directly impacts the final prediction, and the layers all perform the dual jobs of providing context and making a prediction, which might not always be the same.
+Every layer that is not the output layer has the job of providing context to the next layer so that it can do its job better. But each layer output is also present in the final output latents, due to the residual stream. Thus, it directly impacts the final prediction, and the layers all perform the dual jobs of providing context and making a prediction, which might not always be the same. Thus, each layer effectively performs the two tasks of prediction and information up-cycling, which might be in conflict with each other.
 
 The final lambdas in these experiments are evidence for that hypothesis: the output of layer 11 is actively removed from the residual stream after layer 15, which should allow layer 11 to only focus on providing context to layer 12.
+
+Let's see how the lambdas develop over the course of training, showing the lambdas for all runs, and their means:
+
+![Lambdas over training steps](images/lambdas.png)
+
+Two things become very clear:
+
+1. The lambdas develop to the same final values very reliably
+2. They develop in a very smooth fashion over the course of training
 
 ### Norms
 
@@ -77,7 +99,7 @@ x = norm(x)
 ...  # apply the language head
 ```
 
-But in my adapted version, I multiply `x` by a scalar value before decoding it:
+I created an adapted version, in which I multiply `x` by a scalar value before decoding it:
 
 ```python
 ...  # apply the layers
@@ -105,50 +127,7 @@ TODO: iff final two or three layer lambdas are positive and the rest are negativ
 
 TODO: Are the magnitudes of lambdas from early layers lower than those from late layers? Because their impact on the output is reduced, so less of the impact has to be removed.
 
-## The path to the record
-
-In the time I spent experimenting with the changes explained above and below, another record was achived in [PR#137](https://github.com/KellerJordan/modded-nanogpt/pull/137). For the final attempt that you saw above, I of course included these changes, but I had previously attempted the record without them.
-
-[PR#137](https://github.com/KellerJordan/modded-nanogpt/pull/137) combines [PR#128](https://github.com/KellerJordan/modded-nanogpt/pull/128) and [PR#129](https://github.com/KellerJordan/modded-nanogpt/pull/129). Both of these are about the Muon optimizer, which I don't really understand. However, I saw an interesting phenomenon, which I had noticed in my previous attempts: the record attempts that did not include [PR#137](https://github.com/KellerJordan/modded-nanogpt/pull/137) allowed me to reduce the step count significantly more than the record attempt with it did.
-
-The last record on which I had based mine was my own [PR#125](https://github.com/KellerJordan/modded-nanogpt/pull/125), which took 5690 steps. Compared to that, I was able to set the step count to 5630, a reduction of 60 steps (double the 30 step reduction possible with the optimizer updates). This was tested over only 6 runs, so I might ultimately have had to add 10 more steps for a reduction of *only* 50 steps to get a sufficient p-value, but the difference is still stark.
-
-This is unfortunately expected: In my experience, you can never reduce step count as much as you think. In fact, in my initial experiment with layer 11, it looked like I was going to be able to reduce step count from 5690 to 5567, a reduction of 123 steps:
-
-![Val Loss; skip from layer 11; PR#137 not included](images/11-val-loss.png)
-
-But in the end, I could only reduce the step count by ~60 steps.
-
-And when [PR#137](https://github.com/KellerJordan/modded-nanogpt/pull/137) reduced the step-count further, I was only able to reduce it by 30 steps, even though the initial comparison was more promising a reduction of ~90 steps, from 5590 to ~5500 steps (that the baseline doesn't reach a loss of 2.92 is just random chance):
-
-![Validation loss: PR#137 vs PR#137+skip-from-layer-11](images/7000-7001-val-losses.png)
-
-And I've seen the same issue with [PR#119](https://github.com/KellerJordan/modded-nanogpt/pull/119), which reduced the step count from 5960 to 5820, and [PR#124](https://github.com/KellerJordan/modded-nanogpt/pull/124), which reduced them from 5820 to 5690.
-
-This points to some fundamental issue with simply reducing step count.
-
-### Analyzing the step-reduction issue
-
-Here's an old plot I made of the learning rate and sequence length over the course of training, relative to their respective maximum values:
-
-![Hparams over training](images/hparams_lr-and-seq-len.png)
-
-This is from when training still took 5960 steps. What you can see is that both the learning rate and the sequence length change toward the end of training. Now imagine that you see a loss curve over 5960 steps, and you notice that the target loss of 2.92 is hit after only 5890 steps. Then that 2.92 loss value occurs when the learning rate is slightly higher and the sequence length slightly shorter.
-
-My guess was that this impacts the amount of loss reduction per step.
-
-So which of the two is it?
-
-- The learning rate changes only very slightly with small changes in step counts. However, the slope of its reduction over training gets more aggressive, which could have an additional impact
-- The sequence length changes pretty strongly in the last few training steps, so this should make a big difference. My guess was that this is the main culprit of the issue
-
-If the issue is actually the sequence length, then that's strange; the validation loss is computed at the full sequence length, so why does ending training in a lower sequence length reduce the final validation loss?
-
-And indeed, in my one experiment where I schduled the sequence length as if there were still 5960 steps, the final loss was 2.922, so slightly worse than keeping the original schedule.
-
-I tried something similar with the learning rate and it too didn't work either, so I am now stumped as to what causes this strange behavior.
-
-### Why I chose layer 11
+## Why I chose layer 11
 
 I chose to add layer 11 to the output latents because I performed a simple ablation where I tried each layer output once (except for the last one, because why would I add the last layer output to the last layer output?), and it showed the following curve:
 
@@ -156,13 +135,19 @@ I chose to add layer 11 to the output latents because I performed a simple ablat
 
 All but layer 1 (the second layer) reduce the final validation loss, but layer 11 (the 12th layer) reduces it the most, so I chose it.
 
+One possible explanation for why that is has to do with another aspect of the modded-nanogpt architecture: there are skip-connections between these layers: 6&rarr;9, 4&rarr;10, and 2&rarr;11. This means that at layer 11, we effectively pass (a weighted sum of) two layers to the output, which are very far apart. Substracting the layer 11 outputs thus effectively substracts the contributions from multiple layers.
+
+And if the layer representations are very similar between adjacent layers, then that explains why adding more layers together at the output latents doesn't really help: with layer 11, we already have a good representation of all the layers' outputs available for substraction.
+
 ## Other experiments
 
 I originally started these experiments trying to overcome the softmax bottleneck.
 
-> The softmax bottleneck is an effect of the model dimension usually being much, much smaller than the vocabulary size (in our case, 1024 vs. >50,000). The language head, which is a single linear layer, must transform the small output latent into the gigantic vocabulary vector in a single step. If the intrinsic rank of the output vector is higher than that of the latent vector, this is impossible in a single linear-plus-softmax step.
+> The softmax bottleneck is an effect of the model dimension usually being much, much smaller than the vocabulary size (in our case, 1024 vs. >50,000). Because the expressivity of the latents is much more constrained than that of the final probability distribution, the LLM cannot independently optimize the output distribution for all contexts. It must therefore learn to tie multiple contexts&mdash;ideally, very similar ones&mdash;together. To do so, it typically "blends" the distributions, making them less crisp.
 
-A possible mitigation is to increase the output latent dimension more gradually to the vocabulary size, by chaining multiple linear layers. However, that's expensive, and multiple linear layers without a residual connection hurt gradient flow.
+A possible mitigation is to increase the output latent dimension more gradually to the vocabulary size, by chaining multiple linear layers. However, that's expensive, and multiple linear layers without a residual connection hurt gradient flow. Other mitigations include the [Mixure of Softmaxes](https://arxiv.org/abs/1711.03953), [non-linear language heads](https://proceedings.mlr.press/v97/ganea19a.html), or [bilinear](https://arxiv.org/abs/2305.03452) language heads.
+
+I experimented with a different technique.
 
 ### First attempt at mitigating the softmax bottleneck
 
@@ -195,7 +180,7 @@ Considering that last fact, why is not this my official record? Well, let's look
 
 The loss reaches 2.92 only after ~1506 seconds, which is far later than the ~1379 seconds for the actual record, so the extra parameters just make this so damn slow that it isn't worth it in this setting.
 
-However, in a setting where the language head makes up far fewer of the parameters, it might be worthwhile to try this again. However, such a setting is, as far as I know, a setting where the model is very large, so that I cannot try it.
+However, in a setting where the language head makes up far fewer of the parameters, it might be worthwhile to try this again. Since such a setting is, as far as I know, a setting where the model is very large, I cannot try it.
 
 ### Second attempt at mitigating the softmax bottleneck
 
