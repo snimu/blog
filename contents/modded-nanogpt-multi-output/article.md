@@ -165,15 +165,48 @@ My main takeaway from this is that most likely, it is better to add layers to th
 
 There seems to be a strong trend for the final loss to increase as the skip-layer moves further away from the output latents, with the exception of the last two layers, which shouldn't be skipped to the output.
 
+Let's look at another important candidate: how does loss develop as we increase the number of layers we skip from?
+
+![Loss over num skip-layers: all](images/loss_over_numb_layers_all.png)
+
+The main trend I can make out from this plot is that the results are fairly noisy (as expected from a single run per setting); especially when 13 layers are skipped to the output latents, there should be high overlap between them.
+
+To be able to make out any trends, lets first average over all those values, to get the final validation loss over the number of skip-layers, independent of the layer-selection method:
+
+![Mean loss over num skip-layers](images/loss_over_num_layers_avg.png)
+
+If we drew a trendline into this plot, it would probably tilt downward with the number of layers. However, with the level of noise present in the plot, I wouldn't trust such a trendline, so I have to say that the number of layers skipped to the output seems to matter very little. I could be wrong about this, but that's at least what my limited data looks like.
+
+And this makes some sense to me! Let's think back to [the previous section](#why-i-chose-layer-11); specifically, how layer 11 combines representations from layers 2 and 11. If we additionally assume that the layer representations are very similar between adjacent layers, then that explains why adding more layers together at the output latents doesn't really help: with layer 11, we already have a good representation of all the layers' outputs available for substraction.
+
+I'd like to look more closely at the different layer-selection methods, one by one. Let's start with the "Best to Worst" and "Worst to Best" first:
+
+![Loss over num skip-layers: wtb/btw](images/loss_over_numb_layers_btw-wtb.png)
+
+Observations:
+
+- "Worst to Best" starts off worse than "Best to Worse", but catches up when adding enough layers
+- Both methods seem to lead to worse results as the number of skipped layers is increased
+
+The second point would somewhat make sense to me for "Best to Worst"&mdash;we are introducing worse and worse layers over time, so it's no wonder that the final performance gets worse&mdash;but that the same trend holds for "Worst to Best" is very confusing to me. I have no explanation for it other than "random noise", which would mean that none of these plots mean anything. I don't know what it is.
+
+Let's move on to "Early to Late" / "Late to Early":
+
+![Loss over num skip-layers: early to late / late to early](images/loss_over_num_layers_lth-htl.png)
+
+This looks like the reverse trend to the "Best to Worst" / "Worst to Best" trend. I find that suspicious, but at least the trends for "Best to Worst" and "Worst to Best" are the same, as are the trends of "Early to Late" and "Late to Early", which tells me that there may actually be something to this; though, again, I'd be careful interpreting this too strongly.
+
+Finally, let's look what happens when we randomly select the layers to skip:
+
+![Loss over num skip-layers: Random layer choice](images/loss_over_num_layers_random.png)
+
+This shows a very clear trend of reducing loss with an increasing number of skip-layers. This means that "Best to Worst" and "Worst to Best" are the outliers that buck the trend. I have no explanation for this.
+
 TODO: iff final two or three layer lambdas are positive and the rest are negative&mdash;a.k.a. the final few layers are actively doing prediction, while the previous ones only provide context&mdash;could we simply run them in parallel and then do a learned weighted sum over their outputs?
 
 TODO: Are the magnitudes of lambdas from early layers lower than those from late layers? Because their impact on the output is reduced, so less of the impact has to be removed.
 
 TODO: first time below 2.92 -> is there a new record here?
-
-TODO: loss over average distance from output layer (not between layers!)
-
-And if the layer representations are very similar between adjacent layers, then that explains why adding more layers together at the output latents doesn't really help: with layer 11, we already have a good representation of all the layers' outputs available for substraction.
 
 ## Other experiments
 
