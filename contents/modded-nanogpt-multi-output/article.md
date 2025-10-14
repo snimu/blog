@@ -2,7 +2,7 @@
 
 I have a new world record for the modded-nanogpt speedrunning medium track (as of yet, inofficial).
 
-It involves the re-use of activations from earlier layers at the output latent via a learned weighted sum.
+It is achieved by summing the output of layer 11 to the output latents in a learned, weighted sum, which leads to a separation of concerns for early model layers, where they are able to focus only on providing context to the next layer, while not directly impacting the final prediction, because their impact has actively been removed.
 
 This article will describe that record, as well as multiple other experiments. The record can be viewed at [PR#139](https://github.com/KellerJordan/modded-nanogpt/pull/139).
 
@@ -287,6 +287,41 @@ I find a few things interesting about this plot:
 - The layer 11 lambda is, on average, positive! This is as opposed to the layer 11 lambda when we only skip forward layer 11
 - The layer 11 lambda is very different from the lambdas of the surrounding layers; that is likely a results of the skip connection between layers 2 and 11, and is nicely correlated with the performance of skipping only from layer 11 to the output latents
 
+## Rolling skip
+
+When Larry Dial explained his view of the skip enabling a separation of concerns by backing out early layers' contribution to the final prediction, allowing them to focus only on providing a strong signal to the next layer, I wondered if a "rolling skip" would work, where each layer's output is added to the input two layers down in a learned weighted sum.
+
+Concretely, this would look like this (in a simplified 6-layer transformer):
+
+```python
+x = embed(sequence)
+
+x = x + attn0(x)
+x0 = x + mlp0(x)
+
+x = x0 + attn1(x0)
+x1 = x + mlp1(x)
+
+x = x1 + attn2(x1)
+x2 = x + mlp2(x)
+
+x = l3_0 * x0 + l3_2 * x2  # <- ROLLING SKIP
+x = x + attn3(x)
+x3 = x + mlp3(x)
+
+x = l4_1 * x1 + l4_3 * x3  # <- ROLLING SKIP
+x = x + attn4(x)
+x4 = x + mlp4(x)
+
+x = l5_2 * x2 + l5_4 * x4  # <- ROLLING SKIP
+x = x + attn5(x)
+x5 = x + mlp5(x)
+```
+
+For some reason, I unfortunately haven't saved the results for the single test run I did. However, they weren't great. The final loss was aroung 2.922, so it didn't crack the target; and it was incredibly slow (though I do wonder if I somehow got an 8xH100 node with PCIe instead of SMX5, because the slowdown was really extreme).
+
+In summary, this didn't work.
+
 ## The original idea
 
 I originally started these experiments trying to overcome the softmax bottleneck.
@@ -339,7 +374,3 @@ This made me think that the output of the final transformer layer shouldn't be t
 With that in mind, I tried concatenating layer 12'th outputs to the residual *before* the final MLP (though after attention). To make up for the vastly increased parameter count that results from this change, I reduced the expansion factor from 4 to 1, which meant that the parameter count was constant.
 
 However, this caused me some problems. Back then I thought that memory was somehow the issue, so I used a linear layer to project the latents from layer 12 down to size 128. This way, the concatenated layers are only slightly larger than the non-concatenated ones. However, the final loss was 2.922, so not below the limit; and it still took more time per step. Therefore, I dismissed this line of work.
-
-## TODO
-
-- rolling skip
