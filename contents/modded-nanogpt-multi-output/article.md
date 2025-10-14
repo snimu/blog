@@ -208,7 +208,63 @@ This shows a very clear trend of reducing loss with an increasing number of skip
 
 ### Is there another record here?
 
-TODO: first time below 2.92 -> is there a new record here?
+The central question for a modded-nanogpt speedrun is of course how quickly we can go below a loss of 2.92.
+
+To find out, I printed the time and step at which the loss at first fell below 2.92. Since the validation loss is only measured every 125 steps, I interpolate the loss between the last loss above and the first below 2.92 to find the exact time and step at which the target loss was reached. Any run that doesn't go below 2.92 is filtered out.
+
+```python
+[
+    {'num_layers': 10, 'method': 'Late to Early', 'time': 1384.278, 'step': 5463},
+    {'num_layers': 11, 'method': 'Best to Worst', 'time': 1386.6597, 'step': 5470},
+    {'num_layers': 2, 'method': 'Best to Worst', 'time': 1388.0197, 'step': 5469},
+    {'num_layers': 8, 'method': 'Late to Early', 'time': 1388.2837, 'step': 5497},
+    {'num_layers': 7, 'method': 'Late to Early', 'time': 1388.8235, 'step': 5506},
+    {'num_layers': 7, 'method': 'Worst to Best', 'time': 1389.227, 'step': 5501},
+    {'num_layers': 7, 'method': 'Best to Worst', 'time': 1390.0296, 'step': 5510},
+    {'num_layers': 5, 'method': 'Best to Worst', 'time': 1390.2005, 'step': 5466},
+    {'num_layers': 11, 'method': 'Random', 'time': 1391.732, 'step': 5483},
+    {'num_layers': 10, 'method': 'Worst to Best', 'time': 1391.8183, 'step': 5489},
+    {'num_layers': 12, 'method': 'Early to Late', 'time': 1392.233, 'step': 5486},
+    {'num_layers': 4, 'method': 'Late to Early', 'time': 1392.3788, 'step': 5489},
+    {'num_layers': 6, 'method': 'Best to Worst', 'time': 1392.4251, 'step': 5499},
+    {'num_layers': 11, 'method': 'Late to Early', 'time': 1393.9195, 'step': 5489},
+    {'num_layers': 9, 'method': 'Early to Late', 'time': 1394.0956, 'step': 5495},
+    {'num_layers': 4, 'method': 'Early to Late', 'time': 1396.4673, 'step': 5492},
+    {'num_layers': 5, 'method': 'Late to Early', 'time': 1396.6771, 'step': 5467},
+    {'num_layers': 8, 'method': 'Best to Worst', 'time': 1397.3103, 'step': 5533},
+    {'num_layers': 12, 'method': 'Worst to Best', 'time': 1397.7569, 'step': 5502},
+    {'num_layers': 13, 'method': 'Best to Worst', 'time': 1398.2254, 'step': 5495},
+    {'num_layers': 10, 'method': 'Best to Worst', 'time': 1399.5497, 'step': 5522},
+    {'num_layers': 4, 'method': 'Worst to Best', 'time': 1399.8777, 'step': 5512},
+    {'num_layers': 5, 'method': 'Early to Late', 'time': 1399.9347, 'step': 5536},
+    {'num_layers': 9, 'method': 'Worst to Best', 'time': 1399.9734, 'step': 5531},
+    {'num_layers': 8, 'method': 'Early to Late', 'time': 1400.2968, 'step': 5543},
+    {'num_layers': 2, 'method': 'Worst to Best', 'time': 1400.3404, 'step': 5484},
+    {'num_layers': 9, 'method': 'Late to Early', 'time': 1400.6448, 'step': 5510},
+    {'num_layers': 13, 'method': 'Late to Early', 'time': 1400.822, 'step': 5503},
+    {'num_layers': 4, 'method': 'Best to Worst', 'time': 1400.972, 'step': 5482},
+    {'num_layers': 9, 'method': 'Best to Worst', 'time': 1401.3145, 'step': 5540},
+    {'num_layers': 10, 'method': 'Random', 'time': 1401.4992, 'step': 5523},
+    {'num_layers': 13, 'method': 'Random', 'time': 1401.9124, 'step': 5510},
+    {'num_layers': 5, 'method': 'Worst to Best', 'time': 1402.0384, 'step': 5538},
+    {'num_layers': 3, 'method': 'Best to Worst', 'time': 1402.2965, 'step': 5482},
+    {'num_layers': 9, 'method': 'Random', 'time': 1403.1182, 'step': 5545},
+    {'num_layers': 10, 'method': 'Early to Late', 'time': 1403.3504, 'step': 5537},
+    {'num_layers': 11, 'method': 'Worst to Best', 'time': 1404.372, 'step': 5533},
+    {'num_layers': 11, 'method': 'Early to Late', 'time': 1406.2555, 'step': 5536},
+    {'num_layers': 12, 'method': 'Late to Early', 'time': 1406.3194, 'step': 5526},
+    {'num_layers': 3, 'method': 'Late to Early', 'time': 1410.8905, 'step': 5544},
+    {'num_layers': 13, 'method': 'Early to Late', 'time': 1411.1785, 'step': 5544},
+    {'num_layers': 14, 'method': 'Random', 'time': 1411.2291, 'step': 5536},
+    {'num_layers': 3, 'method': 'Worst to Best', 'time': 1411.7569, 'step': 5520},
+    {'num_layers': 6, 'method': 'Early to Late', 'time': 1415.1424, 'step': 5524},
+    {'num_layers': 6, 'method': 'Random', 'time': 1416.6136, 'step': 5535},
+    {'num_layers': 2, 'method': 'Early to Late', 'time': 1418.582, 'step': 5539},
+    {'num_layers': 12, 'method': 'Random', 'time': 1420.4449, 'step': 5486}
+]
+```
+
+Let's remember that the time to the record [described above](#the-record) is 1384.6224 seconds There is exactly one setting which improves over the case of adding the outputs of layer 11 to the output latents. The improvement is by 0.3444 seconds. Taking into account that the layer-11-record is statistically sound, while this one comes from a single run&mdash;and that we actually pick this single run from a large set of results, meaning that we use a lucky run instead of a mean&mdash;this result is meaningless and we can pretty confidently say, that there is no better setting than skipping layer 11 to the output latents, at least by wallclock on 8xH100.
 
 ### Lambdas for multiple skips
 
@@ -237,7 +293,7 @@ I originally started these experiments trying to overcome the softmax bottleneck
 
 > The softmax bottleneck is an effect of the model dimension usually being much, much smaller than the vocabulary size (in our case, 1024 vs. >50,000). Because the expressivity of the latents is much more constrained than that of the final probability distribution, the LLM cannot independently optimize the output distribution for all contexts. It must therefore learn to tie multiple contexts&mdash;ideally, very similar ones&mdash;together. To do so, it typically "blends" the distributions, making them less crisp.
 
-A possible mitigation is to increase the output latent dimension more gradually to the vocabulary size, by chaining multiple linear layers. However, that's expensive, and multiple linear layers without a residual connection hurt gradient flow. Other mitigations include the [Mixure of Softmaxes](https://arxiv.org/abs/1711.03953), [non-linear language heads](https://proceedings.mlr.press/v97/ganea19a.html), or [bilinear](https://arxiv.org/abs/2305.03452) language heads.
+A possible mitigation is to increase the output latent dimension more gradually to the vocabulary size, by chaining multiple linear layers. However, that's expensive, and multiple linear layers without a residual connection hurt gradient flow. Other mitigations include the [Mixture of Softmaxes](https://arxiv.org/abs/1711.03953), [non-linear language heads](https://proceedings.mlr.press/v97/ganea19a.html), or [bilinear](https://arxiv.org/abs/2305.03452) language heads.
 
 I experimented with a different technique.
 
