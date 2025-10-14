@@ -1,10 +1,10 @@
 # modded-nanogpt medium World Record: Reusing intermediate activations in the output latents
 
-I have a new world record for the modded-nanogpt speedrunning medium track.
+I have a new world record for the modded-nanogpt speedrunning medium track (as of yet, inofficial).
 
 It involves the re-use of activations from earlier layers at the output latent via a learned weighted sum.
 
-This article will describe that record, as well as multiple other experiments.
+This article will describe that record, as well as multiple other experiments. The record can be viewed at [PR#139](https://github.com/KellerJordan/modded-nanogpt/pull/139).
 
 ## The record
 
@@ -119,14 +119,6 @@ x = norm(norm(x) * l_x + norm(x_skip) * l_skip)
 
 But it made no difference at all, so it's fine to leave out this last norm. If anything, it made performance worse; but only very, very slightly, which means nothing when done for a single run, so I wouldn't take that too seriously.
 
-## Adding more than one layer output
-
-TODO: everything!
-
-TODO: iff final two or three layer lambdas are positive and the rest are negative&mdash;a.k.a. the final few layers are actively doing prediction, while the previous ones only provide context&mdash;could we simply run them in parallel and then do a learned weighted sum over their outputs?
-
-TODO: Are the magnitudes of lambdas from early layers lower than those from late layers? Because their impact on the output is reduced, so less of the impact has to be removed.
-
 ## Why I chose layer 11
 
 I chose to add layer 11 to the output latents because I performed a simple ablation where I tried each layer output once (except for the last one, because why would I add the last layer output to the last layer output?), and it showed the following curve:
@@ -136,6 +128,50 @@ I chose to add layer 11 to the output latents because I performed a simple ablat
 All but layer 1 (the second layer) reduce the final validation loss, but layer 11 (the 12th layer) reduces it the most, so I chose it.
 
 One possible explanation for why that is has to do with another aspect of the modded-nanogpt architecture: there are skip-connections between these layers: 6&rarr;9, 4&rarr;10, and 2&rarr;11. This means that at layer 11, we effectively pass (a weighted sum of) two layers to the output, which are very far apart. Substracting the layer 11 outputs thus effectively substracts the contributions from multiple layers.
+
+## Adding more than one layer output
+
+After the success of skipping to the output from a single layer, I of course tried to skip multiple layers to the output.
+
+I tried skipping from 2 to 13 layers to see any possible trends.
+
+Of course, it might be important to the final performance to choose carefully from which layer we should skip. Therefore, I performed the ablations for each of the following ways to choose which layers to skip from given some number of layers `N` to skip from:
+
+- Best to Worst &mdash; I took the results from [the previous section](#why-i-chose-layer-11) and sorted the layers by the final validation loss when that single layer is skipped to the output, and ordered the layers from best to worst. So if `N=2`, then we choose the layers 11 and 10; if `N=5`, it's 11, 10, 8, 4, and 9; and so on
+- Worst to Best &mdash; The inverse of Best to Worst; so if `N=2`, we choose layers 1 and 2; if `N=5`, we choose 1, 2, 7, 14, and 6; and so on
+- Early to Late &mdash; Pick the layers in the order of a forward pass (0, 1, 2, ...)
+- Late to Early &mdash; Pick the layers in the order of a backward pass (14, 13, 12, ...)
+- Random &mdash; Randomly pick `N` layers (without replacement, so no picking the same layer twice)
+
+"Best to Worst" and "Worst to Best" might tell us something about how well final performance when adding multiple layers can be predicted from the final performance of skipping a single layer. "Late to Early" and "Early to Late" will give us information on how the final performance is impacted by the layer position. Finally, the "Random" case gives us some signal on how the final performance depends on the number of layers, independent from the layer choice (though since we only perform a single run per `N`, the signal is pretty weak).
+
+As `N` increases, the chosen layers have higher and higher overlap, so the agreement between the different modes at `N=13` will tell us something about the level of noise inherent in the experiments.
+
+Let's first plot the final validation losses over the sorting method:
+
+![Loss over sorting method](images/loss_over_method.png)
+
+We can clearly see that the sorting method matters significantly:
+
+- "Best to Worst" is best. This is nice, because it means that the performance of a single-layer-skip is predictive of the performance of a multi-layer-skip with a given set of layers to skip from
+- "Worst to Best" is much worse than it. However, surprisingly, it is still better than two other settings: "Early to Late" and "Random". This means that there is more to the optimal ordering of layers than just the single-layer-skip performance
+- "Late to Early" is almost as good as "Best to Worst", which is a good indication that late layers are better for skipping than early ones
+- "Early to Late" supports this trend, because it's much worse; slightly worse even than "Worst to Best"
+- "Random" is by far the worst option, which I find slightly confusing. Shouldn't it be average?
+
+My main takeaway from this is that most likely, it is better to add layers to the output latents which are already close to them. To confirm, let's plot the final validation loss over the mean distance of the skip-layers to the output latents:
+
+![Final validation loss over distance to output latents](images/loss_over_dist_to_output.png)
+
+There seems to be a strong trend for the final loss to increase as the skip-layer moves further away from the output latents, with the exception of the last two layers, which shouldn't be skipped to the output.
+
+TODO: iff final two or three layer lambdas are positive and the rest are negative&mdash;a.k.a. the final few layers are actively doing prediction, while the previous ones only provide context&mdash;could we simply run them in parallel and then do a learned weighted sum over their outputs?
+
+TODO: Are the magnitudes of lambdas from early layers lower than those from late layers? Because their impact on the output is reduced, so less of the impact has to be removed.
+
+TODO: first time below 2.92 -> is there a new record here?
+
+TODO: loss over average distance from output layer (not between layers!)
 
 And if the layer representations are very similar between adjacent layers, then that explains why adding more layers together at the output latents doesn't really help: with layer 11, we already have a good representation of all the layers' outputs available for substraction.
 
@@ -191,3 +227,8 @@ This made me think that the output of the final transformer layer shouldn't be t
 With that in mind, I tried concatenating layer 12'th outputs to the residual *before* the final MLP (though after attention). To make up for the vastly increased parameter count that results from this change, I reduced the expansion factor from 4 to 1, which meant that the parameter count was constant.
 
 However, this caused me some problems. Back then I thought that memory was somehow the issue, so I used a linear layer to project the latents from layer 12 down to size 128. This way, the concatenated layers are only slightly larger than the non-concatenated ones. However, the final loss was 2.922, so not below the limit; and it still took more time per step. Therefore, I dismissed this line of work.
+
+## TODO
+
+- rolling skip
+- explicitly add layer diff
