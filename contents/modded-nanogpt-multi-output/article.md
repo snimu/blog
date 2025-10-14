@@ -133,6 +133,8 @@ One possible explanation for why that is has to do with another aspect of the mo
 
 After the success of skipping to the output from a single layer, I of course tried to skip multiple layers to the output.
 
+### Setup
+
 I tried skipping from 2 to 13 layers to see any possible trends.
 
 Of course, it might be important to the final performance to choose carefully from which layer we should skip. Therefore, I performed the ablations for each of the following ways to choose which layers to skip from given some number of layers `N` to skip from:
@@ -146,6 +148,8 @@ Of course, it might be important to the final performance to choose carefully fr
 "Best to Worst" and "Worst to Best" might tell us something about how well final performance when adding multiple layers can be predicted from the final performance of skipping a single layer. "Late to Early" and "Early to Late" will give us information on how the final performance is impacted by the layer position. Finally, the "Random" case gives us some signal on how the final performance depends on the number of layers, independent from the layer choice (though since we only perform a single run per `N`, the signal is pretty weak).
 
 As `N` increases, the chosen layers have higher and higher overlap, so the agreement between the different modes at `N=13` will tell us something about the level of noise inherent in the experiments.
+
+### Experimental results and Analysis
 
 Let's first plot the final validation losses over the sorting method:
 
@@ -202,13 +206,32 @@ Finally, let's look what happens when we randomly select the layers to skip:
 
 This shows a very clear trend of reducing loss with an increasing number of skip-layers. This means that "Best to Worst" and "Worst to Best" are the outliers that buck the trend. I have no explanation for this.
 
-TODO: iff final two or three layer lambdas are positive and the rest are negative&mdash;a.k.a. the final few layers are actively doing prediction, while the previous ones only provide context&mdash;could we simply run them in parallel and then do a learned weighted sum over their outputs?
-
-TODO: Are the magnitudes of lambdas from early layers lower than those from late layers? Because their impact on the output is reduced, so less of the impact has to be removed.
+### Is there another record here?
 
 TODO: first time below 2.92 -> is there a new record here?
 
-## Other experiments
+### Lambdas for multiple skips
+
+I'm curious how these lambdas look.
+
+Specifically, I have the following two questions:
+
+1. If the final two or three layer lambdas are positive and the rest are negative, then that means that the final few layers are actively doing prediction, while the previous ones only provide context. In that case, could we simply run them in parallel and then do a learned weighted sum over their outputs?
+2. Are the magnitudes of lambdas from early layers lower than those from late layers? Because their impact on the output is reduced via the residual, so less of the impact has to be removed
+
+So I plotted the lambda value for each layer, from every single experiment. I did *not* distinguish between the different modes of layer selection, or the number of layer from which to skip to the output latents; I simply collected the lambda values. Here they are:
+
+![Lambdas over layer](images/lambdas_over_layers_violinplots.png)
+
+I find a few things interesting about this plot:
+
+- The lambdas are much smaller before layer 9 than after. This seems to answer my second hypothesis with a resounding YES. It might be a result of layers 9, 10, and 11 already receiving the activations from previous layers, via the skip connections 6&rarr;9, 4&rarr;10, and 2&rarr;11
+- The lambdas in the last few layers are strongly negative, which answers my first hypothesis with a clear NO
+- Most lambdas are, on average, negative, but not all, which is interesting
+- The layer 11 lambda is, on average, positive! This is as opposed to the layer 11 lambda when we only skip forward layer 11
+- The layer 11 lambda is very different from the lambdas of the surrounding layers; that is likely a results of the skip connection between layers 2 and 11, and is nicely correlated with the performance of skipping only from layer 11 to the output latents
+
+## The original idea
 
 I originally started these experiments trying to overcome the softmax bottleneck.
 
@@ -264,4 +287,3 @@ However, this caused me some problems. Back then I thought that memory was someh
 ## TODO
 
 - rolling skip
-- explicitly add layer diff
