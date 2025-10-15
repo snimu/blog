@@ -324,15 +324,9 @@ In summary, this didn't work.
 
 ## The original idea
 
-I originally started these experiments trying to overcome the softmax bottleneck.
+I originally didn't add the intermediate layer outputs to the output latents; instead, I concatenated them.
 
-> The softmax bottleneck is an effect of the model dimension usually being much, much smaller than the vocabulary size (in our case, 1024 vs. >50,000). Because the expressivity of the latents is much more constrained than that of the final probability distribution, the LLM cannot independently optimize the output distribution for all contexts. It must therefore learn to tie multiple contexts&mdash;ideally, very similar ones&mdash;together. To do so, it typically "blends" the distributions, making them less crisp.
-
-A possible mitigation is to increase the output latent dimension more gradually to the vocabulary size, by chaining multiple linear layers. However, that's expensive, and multiple linear layers without a residual connection hurt gradient flow. Other mitigations include the [Mixture of Softmaxes](https://arxiv.org/abs/1711.03953), [non-linear language heads](https://proceedings.mlr.press/v97/ganea19a.html), or [bilinear](https://arxiv.org/abs/2305.03452) language heads.
-
-I experimented with a different technique.
-
-### First attempt at mitigating the softmax bottleneck
+### Concatenating outputs: first attempt
 
 I thought I might just concatenate the output of a previous layer to the final output latent and instantly double the dimension from which we project into the vocabulary. I tried this for every single layer's output (including the last layer's), plus the input embedding ("Input emb")  and an extra embedding ("Extra emb"), and noted the final validation loss for each of the runs (again for 5590 steps, not 5550):
 
@@ -345,7 +339,7 @@ However, an obvious objection to these results being meaningful is that the lang
 1. Simply adding the input embeddings, or even an extra embedding layer just for the job, *increases* validation loss, even though they do contain some information about the input (and adding them in a weighted sum to the residual stream at every layer does reduce the validation loss!) &rarr; pure parameter count cannot be the only reason for the improved performance
 2. Concatenating the output of layer 15 to the output latent&mdash;which *is* the output of layer 15&mdash; reduces the final validation loss a bit, but earlier layers make a much larger difference
 
-The second point is a good comparison, because no additional information is added for the language head, so we see the impact only of the new parameters. I think it's kind of similar to the [Mixture of Softmaxes](https://arxiv.org/abs/1809.09296), except less efficient. Again, the actual layer reuse matters, either through increased information content at the output, or a reduced effective depth that the gradient has to travel at the layer we concatenate
+The second point is a good comparison, because no additional information is added for the language head, so we see the impact only of the new parameters. Again, the actual layer reuse matters, either through increased information content at the output, or a reduced effective depth that the gradient has to travel at the layer we concatenate
 
 A third piece of evidence that the layer reuse is an important component of the reduced validation losses comes from the final record: adding a previous layer's activations to the output latents adds exactly two parameters (the weights of the weighted sum between the vectors), which is nothing. Therefore, something else must be responsible for the improved performance.
 
@@ -367,7 +361,7 @@ The loss reaches 2.92 only after ~1506 seconds, which is far later than the ~137
 
 However, in a setting where the language head makes up far fewer of the parameters, it might be worthwhile to try this again. Since such a setting is, as far as I know, a setting where the model is very large, I cannot try it.
 
-### Second attempt at mitigating the softmax bottleneck
+### Concatenating outputs: second attempt
 
 As part of the experiments around [my last modded-nanogpt record](https://snimu.github.io/2025/10/10/modded-nanogpt-x0.html#bonus-experiment-adding-x00-to-the-output-latent), I had tried adding the input embeddings x00 to the output latent in a weighted sum. In other words, I did exactly what I did for this record, except with the input embeddings instead of some intermediate layer outputs.
 
