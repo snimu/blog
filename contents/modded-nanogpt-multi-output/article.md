@@ -25,14 +25,13 @@ So after only 5 runs, we can be ~98.8% sure that the mean loss over an infinite 
 I simply added the output of layer 11 (the 12'th layer) to the output of the final layer (layer 15, or the 16'th layer), in a weighted sum. This just means that right before applying the language head, I do this:
 
 ```python
-skip_lambdas = self.scalars[-2:]
-x = norm(x) * skip_lambdas[0] + norm(skip_connections[11]) * skip_lambdas[1]
+x = norm(x) * x_lambda + norm(skip_connections[11]) * skip_lambda
 ```
 
 Some details:
 
 - `skip_connections` contain the output latents of each layer, at the corresponding position
-- The `skip_lambdas` are learned scalar values; they are initialized to 1.0 for x and to 0.0 for the skip connection, and then actively optimized over the course of training
+- `x_lambda` and `skip_lambda` are learned scalar values; the former is initialized to 1.0 and the latter to 0.0, and both are actively optimized over the course of training
 
 ### Record - Results
 
@@ -69,8 +68,8 @@ We don't just perform a sum between the outputs of layers 11 and 15, but a weigh
 
 Here are the mean final lambdas over the course of 22 runs, rounded to 3 digits:
 
-- Layer 15 (x-lambda): 0.802
-- Layer 11 (skip-lambda): -0.279
+- Layer 15 (`x_lambda`): 0.802
+- Layer 11 (`skip_lambda`): -0.279
 
 This all but confirms a hypothesis by [Larry Dial](https://github.com/ClassicLarry) which he shared in a [comment](https://github.com/KellerJordan/modded-nanogpt/pull/138#issuecomment-3362739273) in the first PR I made about this record (which I closed to re-open a new one, because the first one was sloppy). His hypothesis is this (in my own words):
 
@@ -264,6 +263,8 @@ To find out, I printed the time and step at which the loss at first fell below 2
 
 Let's remember that the time to the record [described above](#the-record) is 1384.6224 seconds There is exactly one setting which improves over the case of adding the outputs of layer 11 to the output latents. The improvement is by 0.3444 seconds. Taking into account that the layer-11-record is statistically sound, while this one comes from a single run&mdash;and that we actually pick this single run from a large set of results, meaning that we use a lucky run instead of a mean, effectively p-hacking&mdash;this result is meaningless, and we can pretty confidently say that there is no better setting than skipping layer 11 to the output latents, at least by wallclock time to a loss of 2.92 on 8xH100.
 
+However, there are multiple settings which achieve the target validation loss in significantly fewer *steps* than the layer-11-skip record. This means that adding more more layers at the output can theoretically improve performance further. And the good performance of adding only layer-11-outputs to the output latents is likely due to the skip connections in modded-nanogpt; a different architecture might benefit more strongly from adding multiple layer outputs to the output latents. And this is especially true for models with more layers than 16.
+
 ### Lambdas for multiple skips
 
 For multiple skips, each layer's output gets its own learned lambda for the weighted sum with the output latents. I'm curious how these lambdas look.
@@ -379,3 +380,11 @@ With that in mind, I tried concatenating layer 12'th outputs to the residual *be
 However, this caused me OOM errors. I still don't quite understand why (I'm not very deep into the effects of achitecture on the memory requirements of backpropagation), but it caused me to use a linear layer to project the latents from layer 12 down to size 128. This way, the concatenated layers are only slightly larger than the non-concatenated ones.
 
 However, the final loss was 2.922, so not below the limit; and it still took more time per step. Therefore, I dismissed this line of work.
+
+## Summary
+
+Substracting intermediate layer outputs from the output latents enables a separation of concerns for those layers, allowing them to fully focus on enriching the residual stream for the next layer.
+
+For modded-nanogpt medium, skipping layer 11 is likely best, and led to a new world record. However, this partially depends on skip connections inherent in the architecture, and would have to be re-determined for other architectures.
+
+Skipping multiple layer outputs to the output latents doesn't improve wallclock time in modded-nanogpt. However, this might again be due to the skip connections providing multiple layer outputs at layer 11. I could also be different for deeper models. Thus, skipping from more than one layer should not be taken out of consideration for practical use-cases.
