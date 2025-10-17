@@ -62,6 +62,10 @@ And here are some simple stats about the times:
 
 This is a reduction in final run time of ~8.54 seconds.
 
+### Record - Reproduction
+
+TODO: write about Larry's reproduction on the small track.
+
 ### Lambdas
 
 We don't just perform a sum between the outputs of layers 11 and 15, but a weighted sum; and those scalar weights are learned. So what values do they take?
@@ -71,9 +75,11 @@ Here are the mean final lambdas over the course of 22 runs, rounded to 3 digits:
 - Layer 15 (`x_lambda`): 0.802
 - Layer 11 (`skip_lambda`): -0.279
 
-This all but confirms a hypothesis by [Larry Dial](https://github.com/ClassicLarry) which he shared in a [comment](https://github.com/KellerJordan/modded-nanogpt/pull/138#issuecomment-3362739273) in the first PR I made about this record (which I closed to re-open a new one, because the first one was sloppy). His hypothesis is this (in my own words):
+This adds credence to a hypothesis by [Larry Dial](https://github.com/ClassicLarry) which he shared in a [comment](https://github.com/KellerJordan/modded-nanogpt/pull/138#issuecomment-3362739273) in the first PR I made about this record (which I closed to re-open a new one, because the first one was sloppy). His hypothesis is this (in my own words):
 
 The main job of each layer but the last is to provide context for the next layer, so that this layer can do its job better. But each layer output is also present in the final output latents, due to the residual stream. Thus, it directly impacts the final prediction, and the layers all perform the dual jobs of providing context and making a prediction, which might not always be the same.
+
+I will call this the *backout hypothesis*, because Larry uses that language in his reproduction of my record on the normal track.
 
 The final lambdas in these experiments are evidence for that hypothesis: the output of layer 11 is actively removed from the residual stream after layer 15, which should allow layer 11 to only focus on providing context to layer 12. This improves the final performance; and therefore, the lack of a separation of concerns for layer 11 was previously a problem.
 
@@ -86,7 +92,88 @@ Two things become very clear:
 1. The lambdas develop to the same final values very reliably
 2. They develop in a very smooth fashion over the course of training
 
+### Testing the backout hypothesis
+
+I performed experiments with multiple variations of the record architecture to pin down the validity of the backout hypothesis.
+
+They are all compared to two baselines: the original baseline without skipping, and the record as described above&mdash;except that it's run for 5590 steps instead of 5550, to make it comparable with the first baseline. All experiments have this step count. All runs are averaged over 5 runs, except the record skipping from layer 11, because there is only one run of it available at that step count. However, since that run was pretty predictive of the results of the final record, I believe that the comparison is still fair.
+
+One word of caution: the baselines were run on GPUs by a different provider than the new ablations. This can impact timing pretty significantly, so I'll plot all the results over the training step, not the time (the actual timing should be impacted very minimally between these experiments, except the last one).
+
+#### Detaching the skip latents
+
+One initial experiment I did was to put a stopgrad between the layer-11-latents and the output latents, to see how important the gradient from the output to layer 11 is, like this:
+
+```python
+# BEFORE:
+x = x_lambda * x + skip_lambda * norm(skip_connections[11])
+
+# AFTER
+x = x_lambda * x + skip_lambda * norm(skip_connections[11].detach())
+```
+
+The results are interesting:
+
+![Loss with detached layer-11-latents](images/loss_baselines_vs_detached_latents.png)
+
+Without the gradient directly to layer 11, all benefits of the skip connection vanish, and worse. My big problem is that I can think of two possible ways to interpret this, both contradictory:
+
+1. *Supports* the hypothesis: The skip connection works by allowing layer 11 to be more free with how it transforms the output. Without the gradient from the skip connection, layer 11 would only receive a gradient from the output via subsequent layers, which would still encourage it to make a prediction. With the gradient from the output, it can actively learn that its influence will be substracted from the output latent, and how to adapt to maximize its utility to layer 12
+2. *Contradicts* the hypothesis: The gradient through the skip connection is required to improve performance because the output of layer 11 is actively used for prediction, and only through the gradient can layer 11 learn to make that prediction well. This would mean that the skip doesn't lead to a separation of concerns for layer 11, but a superposition of tasks
+
+I have unfortunately confused myself sufficiently about this that I can no longer tell which is more plausible, so let's move on to the next experiment.
+
+#### Adding activation functions to the skip connection
+
+An activation function on the layer 11 latents will obviously change them, and make substracting them from the output latents via a simple weighted sum impossible. If the model is still strong despite this, then layer 11 must help through its own prediction.
+
+I ran ablations with two different activation functions:
+
+- ReLU: Layer 11 will almost certainly have negative entries. These will be set to zero by ReLU, so this activation function will make it truly impossible to back the impact of layer 11 on the residual out at the output residual (there is a caveat here that I'll come to in a moment)
+- TanH: This allows for negative values, and will thus allow the model to preserve the layer 11 activations approximately, but not perfectly
+
+Here are the results:
+
+![Loss with ReLU and TanH](images/loss_baselines_against_relu_tanh.png)
+
+Let's start with TanH: it's much better than ReLU, but only about as good as the old baseline, and thus worse than the new record with a skip. That it is between ReLU&mdash;which fully disables the ability of the model to backout layer 11 latents&mdash;and the baseline with a skip but no activation functions is good evidence that a partial ability to backout layer 11 latents from the output is better than none.
+
+About ReLU: this is some evidence that adding a second representation from earlier in the model to the output isn't actually beneficial to the model. However, now comes the caveat: ReLU is a pretty brutal activation function, which is typically only used between linear layers, not at the output of a model (yes, we still have the language head, but still). So as a final test, I added a linear layer to transform the layer-11 activations after a ReLU was applied.
+
+#### Adding another linear layer
+
+If the record were only about the extra representation at the output, adding more parameters to refine that representation should help. So I tested the following:
+
+```python
+# Linear layer (as parameter)
+skip_projection = nn.Prameters(init_linear(torch.empty(model_dim, model_dim)))
+
+# Transform the layer 11 latents
+skip_connection = F.relu(skip_connections[11])
+skip_connection = norm(F.linear(skip_connection, skip_projection))
+
+# Perform the weighted sum
+x = x_lambda * x + skip_lambda * skip_connection
+```
+
+Here are the results:
+
+![Loss with ReLU and Linear Layer](images/loss_baselines_against_relu_linear.png)
+
+Clearly, the extra parameters help, but only enough to achieve the original baseline loss again. This seems like pretty strong evidence for the backoug hypothesis.
+
+Caveats:
+
+- I should maybe have done the same test with TanH; if it had reached the same loss as the baseline with skip, it might have indicated that the original layer-11-latents would have been reconstructed, and might thus have strengthened the backout hypothesis further. I didn't do that though, for budget reasons
+- I should have logged the cosine similarity or L2 distance between the layer-11-latents and the modified vector that was added to the output latents in these experiments. I simply didn't think of that at the time
+
+Still, all in all, I'd consider the backout hypothesis to be very likely to be true.
+
 ### Norms
+
+There is a potential issue with the norms.
+
+#### Norms – the issue
 
 Before my record, `x` was RMS normed right before applying the language head:
 
@@ -96,7 +183,7 @@ x = norm(x)
 ...  # apply the language head
 ```
 
-I created an adapted version, in which I multiply `x` by a scalar value before decoding it:
+In my record, I multiply `x` and the skipped value by a scalar value and sum the two after norming them independently:
 
 ```python
 ...  # apply the layers
@@ -106,7 +193,25 @@ x = norm(x) * x_lambda + norm(x_skip) * skip_lambda
 
 One potential issue is that the lambdas can grow arbitrarily large, leading to output latents that are effectively un-normed. Since norming the output latents helps model performance, this might be an issue. Theoretically, the language head should be able to just learn to incorporate the constant factor from the lambdas and be fine, but sometimes learning dynamics are weird and don't work out like that.
 
-So I tried the following:
+#### Norms – evidence for the issue
+
+This can also be shown by fixing `lambda_x` to 1. This preserves the initilization of `lambda_x` to 1.0 and `lambda_skip` to 0.0, but prevents the model from letting the absolute values of the two lambdas sum up to approximately 1 (unless it keeps the `lambda_skip` at 0.0). Here is the average over 5 runs for this setting (see [testing the backout hypothesis](#testing-the-backout-hypothesis) above for details; I intended these experiments for that, but noticed that they make more sense here):
+
+![Loss against fixed baseline](images/loss_baselines_against_fixed_lambda_x.png)
+
+This is quite a bit worse! I find that surprising, because the `skip_lambda` should be able to adjust to the `x_lambda` value to cause the same behavior as before, while the language head should be able to make up for the changed norm of the outputs latent.
+
+The `skip_lambda` does change to between -0.52 and -0.58, so it almost causes the same relavie scale of the two. This means that the culprit of the reduced perfomance is that this brings the final output latent too far away from an RMS-normed vector.
+
+Could we reach the same results as in the record if we fixed `x_lambda` to 0.8 and `skip_lambda` to -0.28, which they develop to? I doubt it, because initializing the skip to 0 seems important: it forced the gradient to flow through layers 12-15 early on. If it doesn't, they could be underdeveloped.
+
+For cost-reasons, I didn't test that though. I wouldn't use it either way, because the lambdas make the architecure adaptable to *future* architecture changes. As we will see below, [skipping multiple layers to the output](#adding-more-than-one-layer-output) already changes the learned `skip_lambda` a lot, and I want to preserve that flexibility for any run.
+
+#### Norm – Is the issue real?
+
+That *not* fixing `x_lambda` to 1.0 improves performance as compared to fixing it, and that the model learns on its own to have the absolute values of the two lambdas sum to approximately 1, is a good hint that an extra norm is not required.
+
+But I still tested this out, in the following way:
 
 ```python
 ...  # apply the layers
@@ -114,7 +219,11 @@ x = norm(norm(x) * x_lambda + norm(x_skip) * skip_lambda)
 ...  # apply the language head
 ```
 
-But it made no difference at all, so it's fine to leave out this last norm. If anything, it made performance worse; but only very, very slightly, which means nothing when done for a single run, so I wouldn't take that too seriously.
+I keep the original norms, because the lambdas would otherwise not be very meaningful, and I strongly suspect that leaving them out would lead to much worse performance. Anyway, here is the result:
+
+![Norm-sum-norm: losses](images/loss_norm_sum_norm_over_step.png)
+
+This is acutally worse than the baseline. I suspect that that's random chance (both are from a single run), but I also doubt that the norm helps; so at least for this specific architecture and small dataset, it's not worth adding it.
 
 ## Why I chose layer 11
 
