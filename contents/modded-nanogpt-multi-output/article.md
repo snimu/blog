@@ -2,7 +2,7 @@
 
 I have a new world record for the modded-nanogpt speedrunning medium track (as of yet, inofficial).
 
-It is achieved by summing the output of layer 11 to the output latents in a learned, weighted sum, which leads to a separation of concerns for early model layers: it enables them to focus only on providing context to the next layer, while not directly impacting the final prediction, because their impact has actively been removed.
+It is achieved by summing the output of layer 11 to the output latents in a learned, weighted sum, which leads to a separation of concerns for early model layers: it enables them to focus only on providing context to the next layer without directly impacting the final prediction, because their impact has actively been removed.
 
 This article will describe that record, as well as multiple other experiments. The record can be viewed at [PR#139](https://github.com/KellerJordan/modded-nanogpt/pull/139).
 
@@ -64,7 +64,9 @@ This is a reduction in final run time of ~8.54 seconds.
 
 ### Record - Reproduction
 
-TODO: write about Larry's reproduction on the small track.
+There is already a reproduction of the record. [Larry Dial](https://github.com/ClassicLarry), after seeing my PR for the medium track, immediately reproduced the technique in the now-merged [PR#140](https://github.com/KellerJordan/modded-nanogpt/pull/140). He also mentioned this in [his post about recent improvements to modded-nanogpt](https://www.lesswrong.com/posts/j3gp8tebQiFJqzBgg/how-the-nanogpt-speedrun-wr-dropped-by-20-in-3-months).
+
+While the normal track is architecturally very similar to the medium track, it is slightly different; and it's much smaller. This means that there is evidence for the validity of this technique over two model scales now.
 
 ### Lambdas
 
