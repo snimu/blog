@@ -1,10 +1,10 @@
-# modded-nanogpt medium World Record: Reusing intermediate activations in the output latents
+# modded-nanogpt medium world record: Reusing intermediate activations in the output latents
 
-I have a new world record for the modded-nanogpt speedrunning medium track (as of yet, inofficial).
+Adding the output of layer 11 to the final output latents in a learned, weighted sum leads to a separation of concerns for early model layers: it enables them to focus only on providing context to the next layer, without directly impacting the final prediction. Backing them out of the residual stream this way improves model performance and led me to a new modded-nanogpt medium track world record.
 
-It is achieved by summing the output of layer 11 to the output latents in a learned, weighted sum, which leads to a separation of concerns for early model layers: it enables them to focus only on providing context to the next layer without directly impacting the final prediction, because their impact has actively been removed.
+This article will describe that record and ablations surrounding it. It will go through a thorough investigation of the cause of the model improvements from summing layer-11 latents to the output latents, verifying the "backout hypothesis" described above. Finally, it will describe experiments around summing the activations from multiple layers to the output latents, and several related ideas.
 
-This article will describe that record, as well as multiple other experiments. The record can be viewed at [PR#139](https://github.com/KellerJordan/modded-nanogpt/pull/139).
+The record has been submitted in [PR#139](https://github.com/KellerJordan/modded-nanogpt/pull/139).
 
 ## The record
 
@@ -209,7 +209,7 @@ Could we reach the same results as in the record if we fixed `x_lambda` to 0.8 a
 
 For cost-reasons, I didn't test that though. I wouldn't use it either way, because the lambdas make the architecure adaptable to *future* architecture changes. As we will see below, [skipping multiple layers to the output](#adding-more-than-one-layer-output) already changes the learned `skip_lambda` a lot, and I want to preserve that flexibility for any run.
 
-#### Norm – Is the issue real?
+#### Norm – Does the issue affect the record?
 
 That *not* fixing `x_lambda` to 1.0 improves performance as compared to fixing it, and that the model learns on its own to have the absolute values of the two lambdas sum to approximately 1, is a good hint that an extra norm is not required.
 
@@ -227,7 +227,7 @@ I keep the original norms, because the lambdas would otherwise not be very meani
 
 This is acutally worse than the baseline. I suspect that that's random chance (both are from a single run), but I also doubt that the norm helps; so at least for this specific architecture and small dataset, it's not worth adding it.
 
-## Why I chose layer 11
+### Why I chose layer 11
 
 I chose to add layer 11 to the output latents because I performed a simple ablation where I tried each layer output once (except for the last one, because why would I add the last layer output to the last layer output?). Be aware that I performed these ablations with the previous record's step count of 5590, not the new record's step count of 5550 steps, so the final losses are lower than for the actual record. It showed the following curve:
 
@@ -314,7 +314,7 @@ Finally, let's look what happens when we randomly select the layers to skip:
 
 This shows a very clear trend of reducing loss with an increasing number of skip-layers. This means that "Best to Worst" and "Worst to Best" are the outliers that buck the trend. I have no explanation for this.
 
-### Is there another record here?
+### Does this lead to another record?
 
 The central question for a modded-nanogpt speedrun is of course how quickly we can go below a loss of 2.92.
 
