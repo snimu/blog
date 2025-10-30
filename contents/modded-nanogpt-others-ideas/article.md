@@ -1,4 +1,4 @@
-# TODO: find title
+# Trying out others' ideas
 
 In response to [my post](https://x.com/omouamoua/status/1976695893912174792) announcing [the article about my second modded-nanogpt medium world record](https://snimu.github.io/2025/10/10/modded-nanogpt-x0.html), several people made suggestions for variations of or alternatives to the technique introduced in the article.
 
@@ -15,7 +15,13 @@ My baseline incorporated a technique from [a subsequent modded-nanogpt record](h
 
 ## Multiple Embeddings per Value Embedding
 
-[Braden Koszarsky](https://x.com/KoszarskyB) suggested to use multiple embeddings per value embedding. To test out the effect of this, I varied two things:
+[Braden Koszarsky](https://x.com/KoszarskyB) suggested to use multiple embeddings per value embedding.
+
+I tried out two interpretations of this suggestion.
+
+### Multiple Value Embedding Modules, multiple Embedding Modules per Value Embedding
+
+First, I varied two things:
 
 1. The number of `nn.Embedding` modules (I'll call those "Embedding Modules") per Value Embedding
 2. The number of Value Embeddings
@@ -42,7 +48,7 @@ I preserved the structure of the baseline, where each Value Embedding (now made 
 
 While the Embedding Modules stay the same between the two applications of the Value Embedding, the learned lambdas differ, and we thus allow the model to learn different effective Embeddings between the two layers that each Value Embedding is applied to.
 
-For now, let's ignore the wallclock time, and just see if the additional Embedding Modules improve performance per training step at all. If they don't&mdash;if, unlike in the article this is based on, adding more Embedding Modules *doesn't* consistently improve per-step performance&mdash;then this is pointless anyway. So here is a heatmap of the final validation loss for training runs using everything from one to four Value Embeddings, each using anything from one to five Embedding Layers:
+For now, let's ignore the wallclock time, and just see if the additional Embedding Modules improve performance per training step at all. If they don't&mdash;if, unlike in the article this is based on, adding more Embedding Modules *doesn't* consistently improve per-step performance&mdash;then this is pointless anyway. So here is a heatmap of the final validation loss for training runs using everything from one to four Value Embeddings, each using anything from one to five Embedding Modules:
 
 ![Heatmap final val loss](images/heatmap_val_loss_final.png)
 
@@ -55,12 +61,56 @@ To better see these two trends, I have created two variations of the same heatma
 
 ![Heatmap final val loss as percent of row-max](images/heatmap_val_loss_final_row_percent.png)
 
-TODO
+The more Value Embeddings we use, the more Embedding Modules per Value Embedding can be utilized by the model to further lower loss. This is very surprising to me: each is still only applied to two layers. My intuition for why adding Embedding Modules helps is that it gives the model an individual embedding at each layer, but for the Value Embeddings, the number of shared layers is fixed to two. Sure, adding more Embedding Modules to each Value Embedding seemingly allows the model to learn a more precise Value Embedding for each of the layers. But why would it matter that there are more Value Embeddings with *independent* Embedding Modules? They can already easily learn distinct Embeddings, so what's the reason why more Embedding Modules help?
 
-...
+I suspect that the answer is straightforward: as we apply Embeddings to more layers, it becomes more and more helpful to precisely control the difference between the different Embeddings. Increasing the number of Embedding Modules per Value Embedding will give the optimizer that precision.
 
-Surprising that more val embs means that more embs per val emb works better; each is still only applied to two layers. Maybe having an individual embedding at each layer only makes sense if there are enough layers, but if there are too few, tying them just leads to better performance?
+Let's look at the same normalization, but over the columns:
 
-...
+![Heatmap final val loss as percent of column-max](images/heatmap_val_loss_final_col_percent.png)
 
-TODO: col-max
+The trend here is very strong: the more Value Embeddings we have, the lower the loss. This tends to happen more clearly when the number of Embedding Modules per Value Embedding is higher, showing again that each extra Embedding Module per Value Embedding gives more oomph if there are more Value Embeddings, but that trend isn't completely consistent.
+
+TODO: plots over time
+
+### Multiple Embedding Modules per Value Embedding, one Value Embedding applied to multiple layers
+
+I went back and asked myself why the record that triggered these experiments worked.
+
+In it, I add the outputs of two Embedding Modules to the residual stream at the input of each Attention layer in a learned weighted sum. Doing this allows the model to simulate an individual Embedding for each transformer layer (Attention + MLP) in the model for the cost of just two actual Embedding Modules. And even if we increase the number of Embedding Modules, it can still be way below the total number of layers in the model.
+
+To simulate this effect, I tested the following interpretation of Braden's question: I only have a single Value Embedding, and vary (1) how many Embedding Modules it uses and (2) how many layers it's applied to.
+
+-> 1 total Value Emb?
+
+- increasing num of val embs doesnt consistently lower loss -> doesn't increase number of total params, just more precise application of params
+- increasing num of emb modules per val emb
+
+## Per-layer Embedding by linear transformation
+
+[Danijar Hafner](https://x.com/danijarh) suggested two things to try:
+
+1. Having a single Embedding Module like it was before the record that spawned these suggestions, but varying it for every layer by applying a linear transformation to it. This linear transformation is different for each layer, to enable a different effective Embedding per layer. The linear layer has far fewer parameters than an Embedding Module, so this is more parameter efficient. However, it is more expensive to apply a Linear Layer than an Embedding Module, because the latter is just a lookup table. This is noted as "1024->1024 projection" in the plots
+2. Having as many Embedding Modules as model layers, but having them be much smaller than the model dimension, and projecting them into the model dimension via a single, shared linear transformation. I vary the dimension of the Embedding Modules among the following values: [64, 128, 256, 512]. The corresponding result will be called "[[dim]]->1024 projection", where [[dim]] is the Embedding dimension
+
+Here are the validation losses for these, plotted against the baseline over the training step:
+
+![Val loss projection step](images/val_loss_projection_step.png)
+
+The first thing I notice is that these results are a bit noisy (which is expected for a single run per setting). Why would the 64->1024 projection be better per step than the 128->1024 one?
+
+The second thing I notice is that the first of the two suggestions by Danijar&mdash;1024->1024, a.k.a. a single Embedding Module projected by individual linear transformations&mdash;is very close to the worst run of all, so this is almost certainly not a contender.
+
+The third thing I notice is that per step, the model learns more the larger the Embedding Modules. This is expected, as an increasing Embedding dimension increases the number of parameters in both the Embedding Modules and the Linear Layer. Actually, the trend is very weak, to the point that it surprises me quite a bit. This can probably be attributed to noise again.
+
+Lastly, none of these come close to the baseline.
+
+But maybe they are much faster, leading to a shorter wallclock time?
+
+![Val loss projection time](images/val_loss_projection_time.png)
+
+The above plot shows that no, this isn't the case.
+
+What is interesting about it is that smaller embeddings reduce the runtime so much that they reach the same loss faster than the larger embeddings. However, almost none of them even cross the 2.92 loss target, so it hardly matters.
+
+One possible explanation for the underperformance of these techniques is that a linear transformation of a bunch of vectors, or a bunch of linear transformations of a single vector, just doesn't allow for much expressive power. So I tried to also use ReLU after the linear transformation. In the 1024->1024 case, this allows the different linear transformations to set different parts of the single Embedding Module to zero, while in the other projections, the single linear transformation is now capable of 
