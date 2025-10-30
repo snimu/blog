@@ -1,17 +1,57 @@
-# Trying out others' ideas
+# Trying out other peoples' ideas
 
 In response to [my post](https://x.com/omouamoua/status/1976695893912174792) announcing [the article about my second modded-nanogpt medium world record](https://snimu.github.io/2025/10/10/modded-nanogpt-x0.html), several people made suggestions for variations of or alternatives to the technique introduced in the article.
 
-I managed to test two of these: multiple embeddings per value embedding as suggested by [Braden Koszarsky](https://x.com/KoszarskyB), and variations in the per-layer embedding via linear transformations by [Danijar Hafner](https://x.com/danijarh). In this article, I will first quickly repeat the technique used in the previous article, and then go through the results for both of these suggested techniques.
+I managed to test two of these: multiple embeddings per value embedding as suggested by [Braden Koszarsky](https://x.com/KoszarskyB), and variations in the per-layer embedding via linear transformations by [Danijar Hafner](https://x.com/danijarh). In this article, I will first offer a quick refresher on the relevant details of the baseline, and then go through the results for both of the suggested techniques.
 
 ## The baseline
 
-TODO:
+The baseline uses two techniques that will be relevant for this article.
 
-- multi-embedding
-- value embeddings
+It performs a weighted sum of multiple embeddings at the input of every transformer layer (which starts with Attention):
 
-My baseline incorporated a technique from [a subsequent modded-nanogpt record](https://snimu.github.io/2025/10/19/modded-nanogpt-backout.html) I made. The exact technique doesn't matter here, what's important is that since it is clearly composable with the multi-embedding technique, the results in this article should be meaningful.
+```python
+# Create the embeddings
+x = x00 = norm(self.embed1(input_sequence))
+x01 = norm(self.embed2(input_sequence))
+
+# Sum the embeddings at every layer and apply the layer
+# Ignores skip connections, etc.
+for i, layer in enumerate(self.layers):
+    # The lambdas are learned scalar values
+    x = lambdas[i][0] * x + lambdas[i][1] * x00 + lambdas[i][2] * x01
+    x = layer(x)  # includes residual
+```
+
+Adding more embeddings (up to `x04`) consistently reduced the validation loss at each training step, but adding more than one extra embedding made the wallclock time to a loss of 2.92&mdash;which is the modded-nanogpt medium track target&mdash;worse. The reason this works is most likely that the lambdas, which are learned scalars, differ from layer to layer. Since we produce embeddings not via a single Embedding Module, but by the interpolation between two Embedding Modules, and the lambdas determine where along that intersection we lie, the model can provide a different Embedding for each layer for the cost of two Embedding Modules (and can do so in a more fine-grained manner if we increase the number of Embedding Modules that we use).
+
+The baseline also includes so-called value embeddings, which are extra embedding layers that are mixed into the Attention values, like this (simplified psuedo-code):
+
+```python
+def attention_with_value_embeddings(
+        input_ids: torch.Tensor,  # B, T
+        x: torch.Tensor,  # B, T, D
+        value_emb: nn.Embedding,
+        lambdas: torch.Tensor,  # 2
+        W_q: nn.Parameter,  # D, D
+        W_k: nn.Parameter,  # D, D
+        W_v: nn.Parameter,  # D, D
+) -> torch.Tensor:
+    q = rope(F.linear(x, W_q))
+    k = rope(F.linear(x, W_k))
+    v = F.linear(x, W_v)
+
+    ### Here come the value embeddings
+    v_embs = value_emb(input_ids)  # B, T, D
+    v = lambdas[0] * v + lambdas[1] * v_embs  # <- add value embeddings to values
+    ### ------------------------------
+
+    ...  # apply attention
+```
+
+Each Value Embedding is applied to two layers: one is applied to layers 0 and 11, then 1 and 12, 2 and 13, 3 and 14, and 4 and 15. While the Value Embedding is re-used between two distant layers, the lambdas at those layers differ. Those lambdas are learned scalars, so the model can change how strongly the Value Embedding is applied to different layers.
+
+All runs in this article incorporate an architectural trick from [a subsequent modded-nanogpt record](https://snimu.github.io/2025/10/19/modded-nanogpt-backout.html) I made, but the exact technique doesn't matter here. What's important is that since it is clearly composable with the multi-embedding technique, the results in this article should be meaningful; this comment is just for transparency.
 
 ## Multiple Embeddings per Value Embedding
 
@@ -174,3 +214,7 @@ That last point is interesting, because the 128->1024 projection should be fairl
 Unfortunately, the large number of Embedding Modules together with the linear transformation are just too slow. This shouldn't be surprising: The 64->1024 projection has as many Embedding parameters as simply having a second full input embedding (64*16=1024, and we keep one of the two input embeddings from the record). And the linear transformation adds more parameters, and an expensive matrix operation.
 
 Since the per-step performance already starts to deterioate as we go from the 128->1024 to the 64->1024 projection, lowering the Embedding size further is unlikely to improve wallclock time.
+
+## Conclusion
+
+The experiments made at the suggestion of Braden Koszarsky and Danijar Hafner provide intersting results, and add to my understanding of the benfits of using multiple Embedding Modules in an LLM. However, they unfortunately don't lead to a new modded-nanogpt record.
