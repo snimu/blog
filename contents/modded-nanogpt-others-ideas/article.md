@@ -1,6 +1,6 @@
 # Trying out other peoples' ideas
 
-In response to [my post](https://x.com/omouamoua/status/1976695893912174792) announcing [my second modded-nanogpt medium world record](https://github.com/KellerJordan/modded-nanogpt/pull/124), several people made suggestions for variations of or alternatives to the technique introduced in [[the article](https://snimu.github.io/2025/10/10/modded-nanogpt-x0.html)].
+In response to [my post](https://x.com/omouamoua/status/1976695893912174792) announcing [my second modded-nanogpt medium world record](https://github.com/KellerJordan/modded-nanogpt/pull/124), several people made suggestions for variations of or alternatives to the technique introduced in [the article](https://snimu.github.io/2025/10/10/modded-nanogpt-x0.html).
 
 I managed to test two of these: multiple embeddings per value embedding as suggested by [Braden Koszarsky](https://x.com/KoszarskyB), and variations in the per-layer embedding via linear transformations by [Danijar Hafner](https://x.com/danijarh). In this article, I will first offer a quick refresher on the relevant details of the baseline, and then go through the results for both of the suggested techniques.
 
