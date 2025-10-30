@@ -97,12 +97,35 @@ I went back and asked myself why the record that triggered these experiments wor
 
 In it, I add the outputs of two Embedding Modules to the residual stream at the input of each Attention layer in a learned weighted sum. Doing this allows the model to simulate an individual Embedding for each transformer layer (Attention + MLP) in the model for the cost of just two actual Embedding Modules. And even if we increase the number of Embedding Modules, it can still be way below the total number of layers in the model.
 
-To simulate this effect, I tested the following interpretation of Braden's question: I only have a single Value Embedding, and vary (1) how many Embedding Modules it uses and (2) how many layers it's applied to.
+To simulate this effect, I tested the following interpretation of Braden's question: I only have a single Value Embedding, and vary (1) how many Embedding Modules it uses and (2) how many layers it's applied to. Lets plot the same heatmaps as before, starting with the raw losses (For dumb reasons, I wrote down the number of layers that the Value Embedding is applied to in the beginning of the model; but it's always applied to the same number of layers at the end of the model again. This is made explicit in the axis label, but I wanted to stress it again so you don't overlook it). Here are the results:
 
--> 1 total Value Emb?
+![Heatmap final val loss one valemb](images/heatmap_val_loss_one_valemb_final.png)
 
-- increasing num of val embs doesnt consistently lower loss -> doesn't increase number of total params, just more precise application of params
-- increasing num of emb modules per val emb
+Two things jump out immediately:
+
+- More Embedding Modules seem to help about as much as applying the Value Embedding to more layers does
+- Only two settings achieve a loss lower than the target of 2.92 in the given number of steps: 3-4 and 4-5 (where the first number is the number of layer the Value Embedding is applied to in both the front and the back of the model each, and the second is the number of Embedding Modules)
+
+Let's look at the same heatmap, but with per-row normalization:
+
+![Heatmap final val loss one valemb as percent of max per-row loss](images/heatmap_val_loss_one_valemb_final_row_percent.png)
+
+- Increasing the number of Embedding Modules again makes a bigger difference if the Value Embedding is applied to more layers; I suspect that this is, again, the case due to increased utility of precision in the Embedding at each layer
+- However, increasing the number of Embedding Modules *always* helps, just not as much. I suspect that that's because the same Value Embedding is applied to more layers
+
+Now for the column-normalized version:
+
+![Heatmap final val los sone valemb as percent of max per-columnn loss](images/heatmap_val_loss_one_valemb_final_col_percent.png)
+
+The number of layers that the Value Embedding is applied to doesn't impact the final loss nearly as strongly as it did in the previous experiments. That's likely because we only have 1xE embedding modules, instead of VxE ones; in other words, the number of parameters in the model doesn't change with the number of layers we apply the Value Embedding to (well, it does, but only by VxE for the scalars in the weighted sum at each layer, which is nothing).
+
+Still, applying the Value Embedding to more layers does improve performance. That's evidence for the hypothesis that the reason why more Embedding Modules help is that they, together with the learned scalars for the weighted sum, give the model an individual Embedding per layer, and that more Embedding Modules give the model more freedom to make these layers distinct.
+
+Does one or both of the two runs that go below the target loss improve the wallclock time?
+
+![Validation loss over time for baseline and record candidates](images/val_loss_time_one_valemb_record_candidates.png)
+
+No, they do not.
 
 ## Per-layer Embedding by linear transformation
 
