@@ -71,7 +71,25 @@ Let's look at the same normalization, but over the columns:
 
 The trend here is very strong: the more Value Embeddings we have, the lower the loss. This tends to happen more clearly when the number of Embedding Modules per Value Embedding is higher, showing again that each extra Embedding Module per Value Embedding gives more oomph if there are more Value Embeddings, but that trend isn't completely consistent.
 
-TODO: plots over time
+Of course, this is modded-nanogpt, so we have to look at the wallclock times. I will do this separately for every number of Value Embeddings, to make the plots a bit more readable. I will keep the run with 4 Value Embeddings and 1 Embeding Module per Value Embedding in each of the plots, because it is the baseline.
+
+![Val loss time 1 VE](images/val_loss_time_1ve.png)
+
+With one Value Embedding, none of the runs even come close to the baseline.
+
+![Val loss time 2 VE](images/val_loss_time_2ve.png)
+
+With two Value Embeddings, the same is true.
+
+![Val loss time 3 VE](images/val_loss_time_3ve.png)
+
+Three Value Embeddings with a single Embedding Module each is better than four Value Embeddings with one Embedding Module each over most of the run, but doesn't reach the target loss in the given number of steps. I did make this comparison [in this article](https://snimu.github.io/2025/10/07/modded-nanogpt-value-embeddings.html), where I showed that this isn't a record.
+
+![Val loss time 4 VE](images/val_loss_time_4ve.png)
+
+With four Value Embeddings, the 8xH100 clearly start reaching their limit, and while the per-step loss gets lower, the wallclock time to a loss of 2.92 get worse and worse. In fact, the reason I didn't try five Value Embeddings is that the node ran out of memory.
+
+In summary, these techniques do not lead to a new record.
 
 ### Multiple Embedding Modules per Value Embedding, one Value Embedding applied to multiple layers
 
@@ -113,4 +131,23 @@ The above plot shows that no, this isn't the case.
 
 What is interesting about it is that smaller embeddings reduce the runtime so much that they reach the same loss faster than the larger embeddings. However, almost none of them even cross the 2.92 loss target, so it hardly matters.
 
-One possible explanation for the underperformance of these techniques is that a linear transformation of a bunch of vectors, or a bunch of linear transformations of a single vector, just doesn't allow for much expressive power. So I tried to also use ReLU after the linear transformation. In the 1024->1024 case, this allows the different linear transformations to set different parts of the single Embedding Module to zero, while in the other projections, the single linear transformation is now capable of 
+One possible explanation for the underperformance of these techniques is that a linear transformation of a bunch of vectors, or a bunch of linear transformations of a single vector, just doesn't allow for much expressive power. So I tried to also use ReLU after the linear transformation. In the 1024->1024 case, this allows the different linear transformations to set different parts of the single Embedding Module to zero, while in the other projections, the different Embedding Modules are now capable of eliciting only parts of the Linear Layer weights (which are what summed up to produce the output).
+
+Here are the results:
+
+![Val loss projection ReLU step](images/val_loss_projection_relu_step.png)
+
+Some observations:
+
+- This is much better than without the ReLU, as expected
+- The 1024->1024 projection is by far the worst
+- For the others, the trend seems to be that smaller embeddings are better not just in wallclock time, but even in per-step performance. However, this trend reverses when the embeddings get too small: 128->1024 is best, and 64->1024 is only the second best
+- The 128->1024 projection is actually better per-step than the baseline!
+
+That last point is interesting, because the 128->1024 projection should be fairly efficient. Let's look at the loss over time:
+
+![Val loss projection ReLU time](images/val_loss_projection_relu_time.png)
+
+Unfortunately, the large number of Embedding Modules together with the linear transformation are just too slow. This shouldn't be surprising: The 64->1024 projection has as many Embedding parameters as simply having a second full input embedding (64*16=1024, and we keep one of the two input embeddings from the record). And the linear transformation adds more parameters, and an expensive matrix operation.
+
+Since the per-step performance already starts to deterioate as we go from the 128->1024 to the 64->1024 projection, lowering the Embedding size further is unlikely to improve wallclock time.
